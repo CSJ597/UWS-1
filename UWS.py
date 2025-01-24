@@ -100,19 +100,9 @@ class MarketAnalysis:
             return f"TREND ANALYSIS ERROR: {str(e)}"
 
     def generate_technical_chart(self, data, symbol):
-        """
-        Generate a comprehensive technical analysis chart for last 12 hours
-        
-        Args:
-            data (pd.DataFrame): Market price data
-            symbol (str): Stock/futures symbol
-        
-        Returns:
-            str: Base64 encoded chart image
-        """
-        plt.figure(figsize=(12, 8))
-        plt.style.use('seaborn-v0_8')
-        
+        """Generate a comprehensive technical analysis chart"""
+        plt.figure(figsize=(12, 8), facecolor="#a3c1ad")  # Set the facecolor here
+
         # Price and Bollinger Bands
         close_prices = data['Close']
         window = min(20, len(close_prices))  # Adjust window size if data is less
@@ -121,36 +111,28 @@ class MarketAnalysis:
         std_dev = close_prices.rolling(window=window).std()
         upper_band = middle_band + (std_dev * 2)
         lower_band = middle_band - (std_dev * 2)
-        
-        # Convert index to EST timezone (data is already tz-aware)
+
+        # Convert index to EST timezone
         est_index = data.index.tz_convert('US/Eastern')
-        
-        # Plot the technical analysis
-        plt.plot(est_index, close_prices, label='Close Price', color='white')
+
+        # Plot with white line
+        plt.plot(est_index, close_prices, label='Close Price', color='white', linewidth=1.5)
         plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
         plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
         plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
-        
-        plt.title('Underground Wall Street\n E-Mini S&P 500 TA', pad=20, color='white')
-        plt.xlabel('Time (EST)', color='white')
-        plt.ylabel('Price', color='white')
+
+        plt.title('Underground Wall Street\nE-Mini S&P 500 TA', pad=20, color='black')
+        plt.xlabel('Time (EST)')
+        plt.ylabel('Price')
         plt.legend()
-        plt.grid(True, color='white', linestyle='--', linewidth=0.5)
-        plt.xticks(rotation=45, color='white')
-        
-        # Format x-axis to show EST times
-        plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%I:%M %p', tz=est_index.tz))
-        
-        # Set the background color
-        plt.gcf().set_facecolor('#a3c1ad')  # Blue color
-        
-        plt.tight_layout()
-        
-        # Save plot to buffer
+        plt.grid(True, color='black')
+        plt.xticks(rotation=45)
+
+        # Save plot to buffer with matching facecolor
         buffer = BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight')
+        plt.savefig(buffer, format='png', bbox_inches='tight', facecolor="#a3c1ad")  # Ensure facecolor matches
         plt.close()
-        
+
         # Encode image to base64
         return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
@@ -345,4 +327,4 @@ if __name__ == "__main__":
         report, chart = generate_market_report([analysis_results])
         send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
 
-    print("Analysis complete. Good Luck!")
+    print("Analysis completed and report sent. Script will stop now.")
