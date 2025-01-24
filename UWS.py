@@ -121,17 +121,24 @@ class MarketAnalysis:
         upper_band = middle_band + (std_dev * 2)
         lower_band = middle_band - (std_dev * 2)
         
-        plt.plot(data.index, close_prices, label='Close Price', color='blue')
-        plt.plot(data.index, middle_band, label='Middle Band', color='gray', linestyle='--')
-        plt.plot(data.index, upper_band, label='Upper Band', color='red', linestyle=':')
-        plt.plot(data.index, lower_band, label='Lower Band', color='green', linestyle=':')
+        # Convert index to EST timezone
+        est_index = data.index.tz_localize('UTC').tz_convert('US/Eastern')
         
-        plt.title(f'{symbol} Technical Analysis (Last 12 Hours)')
-        plt.xlabel('Time')
+        plt.plot(est_index, close_prices, label='Close Price', color='blue')
+        plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
+        plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
+        plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
+        
+        plt.title(f'{symbol} Technical Analysis (Last 12 Hours) - EST')
+        plt.xlabel('Time (EST)')
         plt.ylabel('Price')
         plt.legend()
         plt.grid(True)
         plt.xticks(rotation=45)
+        
+        # Format x-axis to show EST times
+        plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%I:%M %p', tz=est_index.tz))
+        
         plt.tight_layout()
         
         # Save plot to buffer
