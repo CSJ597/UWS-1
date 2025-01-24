@@ -25,7 +25,7 @@ def wait_until_next_run():
     now = datetime.now(et_tz)
     
     # Set target time to 5:30 PM today
-    target = now.replace(hour=18, minute=35, second=0, microsecond=0)
+    target = now.replace(hour=18, minute=38, second=0, microsecond=0)
     
     # If we're past 5:30 PM, move to next day
     if now > target:
@@ -160,37 +160,40 @@ class MarketAnalysis:
     
     def _plot_ohlcv(self, data, ax, title):
         """Plot OHLCV data on the given axis"""
+        # Reset index for plotting
+        df = data.reset_index()
+        df.index = range(len(df))
+        
         # Plot price line with gradient fill
-        ax.plot(data.index, data['Close'], 
+        ax.plot(df.index, df['Close'], 
                color='white', linewidth=2, label='Price')
-
+        
         # Add gradient fill
-        ax.fill_between(data.index, data['Close'], data['Close'].min(),
+        ax.fill_between(df.index, df['Close'], df['Close'].min(),
                        alpha=0.1, color='white')
-
+        
         # Add volume at the bottom
-        if 'Volume' in data.columns:
+        if 'Volume' in df.columns:
             volume_ax = ax.twinx()
-            volume_ax.fill_between(data.index, data['Volume'],
+            volume_ax.fill_between(df.index, df['Volume'],
                                alpha=0.15, color='gray')
             volume_ax.set_ylabel('Volume', color='gray')
             volume_ax.tick_params(axis='y', colors='gray')
             volume_ax.grid(False)
-
+        
         # Format x-axis with original timestamps
         times = data.index.strftime('%I:%M %p').str.lstrip('0')
-        x_ticks = range(0, len(data), max(1, len(data)//5))
-        ax.set_xticks(x_ticks)
-        ax.set_xticklabels(times[::max(1, len(data)//5)], rotation=45)
-
+        ax.set_xticks(range(0, len(df), max(1, len(df)//5)))
+        ax.set_xticklabels(times[::max(1, len(df)//5)], rotation=45)
+        
         # Customize appearance
         ax.set_title(title, color='white', pad=20)
         ax.set_ylabel('Price', color='white')
         ax.tick_params(colors='white')
         ax.grid(True, alpha=0.2, color='gray')
-
+        
         # Add percentage change
-        pct_change = ((data['Close'].iloc[-1] - data['Close'].iloc[0]) / data['Close'].iloc[0]) * 100
+        pct_change = ((df['Close'].iloc[-1] - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
         ax.text(0.02, 0.95, f'{pct_change:+.2f}%', 
                 transform=ax.transAxes, color='white',
                 fontsize=12, fontweight='bold')
