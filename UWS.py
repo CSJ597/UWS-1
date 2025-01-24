@@ -1,22 +1,67 @@
-import yfinance as yf
+import requests
 import numpy as np
 import pandas as pd
+import yfinance as yf
 
 class ScalpingAnalysis:
     def __init__(self):
-        self.ticker = "ES=F"  # E-mini S&P 500 Futures ticker
-        self.period = "1d"  # Fetch 1 day of data
-        self.interval = "1m"  # 1-minute interval for intraday data
+        pass
 
     def get_yahoo_data(self):
         """Fetch data from Yahoo Finance"""
         try:
-            # Fetch the last 1 day of data at 1-minute intervals
-            data = yf.download(self.ticker, period=self.period, interval=self.interval)
+            # Fetch data for the E-mini S&P 500 Futures (ES=F)
+            data = yf.download("ES=F", period="1d", interval="1m")
             return data
         except Exception as e:
-            print(f"Error fetching data from Yahoo Finance: {e}")
+            print(f"Error fetching Yahoo data: {e}")
             return pd.DataFrame()
+
+    def advanced_scalping_analysis(self):
+        """Comprehensive scalping preparation analysis"""
+        # Fetch data from Yahoo
+        data = self.get_yahoo_data()
+        
+        if data.empty:
+            return "Unable to fetch market data"
+
+        # Price analysis
+        close_prices = data['Close']
+
+        # Volatility calculation
+        returns = close_prices.pct_change()
+        volatility = {
+            'historical_volatility': returns.std() * np.sqrt(252) * 100,
+            'current_daily_change': returns.iloc[-1] * 100
+        }
+
+        # Technical indicators (simplified for demonstration)
+        macd = self._custom_macd(close_prices)
+        rsi = self._custom_rsi(close_prices)
+
+        # Compile comprehensive analysis
+        analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
+
+💰 MARKET DATA SOURCES:
+- Yahoo Finance: {'✅ Loaded' if not data.empty else '❌ Failed'}
+
+📊 MARKET STRUCTURE:
+- Current Price: ${close_prices.iloc[-1]:,.2f}
+
+📈 MARKET METRICS:
+- Historical Volatility: {volatility['historical_volatility']:,.2f}%
+- Daily Price Change: {volatility['current_daily_change']:,.2f}%
+
+🚀 TECHNICAL INDICATORS:
+- MACD Line: {macd['macd_line']:,.4f}
+- MACD Signal: {macd['signal_line']:,.4f}
+- MACD Histogram: {macd['histogram']:,.4f}
+- RSI: {rsi:,.2f}
+
+💡 SCALPING INSIGHTS:
+{self._generate_scalping_insights(macd, rsi, volatility)}
+"""
+        return analysis
 
     def _custom_macd(self, prices, fast_period=12, slow_period=26, signal_period=9):
         """Custom MACD calculation"""
@@ -46,67 +91,6 @@ class ScalpingAnalysis:
         rsi = 100.0 - (100.0 / (1.0 + rs))
         
         return rsi.iloc[-1]
-
-    def get_market_sentiment(self):
-        """Placeholder for fetching market sentiment (using Yahoo or custom sources)"""
-        # Here we can implement sentiment analysis or fetch news using another method
-        return {
-            "news": [
-                {"headline": "Stock Market News", "summary": "Market opens up with bullish momentum."}
-            ]
-        }
-
-    def advanced_scalping_analysis(self):
-        """Comprehensive scalping preparation analysis"""
-        # Fetch data from Yahoo Finance
-        historical_data = self.get_yahoo_data()
-
-        if historical_data.empty:
-            return "Unable to fetch market data"
-        
-        # Market sentiment (Placeholder logic)
-        sentiment = self.get_market_sentiment()
-        
-        # Price analysis
-        close_prices = historical_data['Close']
-        
-        # Volatility calculation
-        returns = close_prices.pct_change()
-        volatility = {
-            'historical_volatility': returns.std() * np.sqrt(252) * 100,
-            'current_daily_change': returns.iloc[-1] * 100
-        }
-        
-        # Technical indicators (MACD and RSI)
-        macd = self._custom_macd(close_prices)
-        rsi = self._custom_rsi(close_prices)
-        
-        # Compile comprehensive analysis
-        analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
-
-💰 MARKET DATA SOURCES:
-- Yahoo Finance: {'✅ Loaded' if not historical_data.empty else '❌ Failed'}
-
-📊 MARKET STRUCTURE:
-- Current Price: ${close_prices.iloc[-1]:,.2f}
-
-📈 MARKET METRICS:
-- Historical Volatility: {volatility['historical_volatility']:,.2f}%
-- Daily Price Change: {volatility['current_daily_change']:,.2f}%
-
-🚀 TECHNICAL INDICATORS:
-- MACD Line: {macd['macd_line']:,.4f}
-- MACD Signal: {macd['signal_line']:,.4f}
-- MACD Histogram: {macd['histogram']:,.4f}
-- RSI: {rsi:,.2f}
-
-🌐 MARKET SENTIMENT:
-{chr(10).join(f'• {news["headline"]}' for news in sentiment.get('news', [])[:2])}
-
-💡 SCALPING INSIGHTS:
-{self._generate_scalping_insights(macd, rsi, volatility)}
-"""
-        return analysis
 
     def _generate_scalping_insights(self, macd, rsi, volatility):
         """Generate scalping insights based on indicators"""
