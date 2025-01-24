@@ -251,9 +251,10 @@ def generate_market_report(analyses):
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
     report = f"""
 📈 UWS Market Update 📉
-{'─' * 15}
 📅 {current_date}
 📊 E-Mini S&P 500 Mar 25
+{'─' * 15}
+
 
 """
     chart = None
