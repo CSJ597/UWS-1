@@ -1,6 +1,7 @@
 import yfinance as yf
 import numpy as np
 import pandas as pd
+import requests
 
 class ScalpingAnalysis:
     def get_yahoo_data(self, symbol='ES=F', period='1d', interval='5m'):
@@ -122,22 +123,47 @@ class ScalpingAnalysis:
         
         return chr(10).join(insights)
 
+def send_discord_message(webhook_url, message):
+    """
+    Send message to Discord webhook
+    
+    Args:
+        webhook_url (str): Discord webhook URL
+        message (str): Message to send
+    """
+    max_length = 2000
+    for i in range(0, len(message), max_length):
+        chunk = message[i:i+max_length]
+        try:
+            response = requests.post(webhook_url, json={"content": chunk})
+            response.raise_for_status()  # Raise an exception for HTTP errors
+        except Exception as e:
+            print(f"Error sending Discord message: {e}")
+
 def main():
-    # Example usage for E-mini S&P 500 Futures
+    # Discord webhook URL
+    webhook_url = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+    
+    # Initialize scalping analysis
     scalping_analysis = ScalpingAnalysis()
     
-    # Example symbols you might want to analyze
+    # Example symbols to analyze
     symbols = ['ES=F', 'NQ=F', '^GSPC']
+    
+    # Collect all analyses
+    full_analysis = ""
     
     for symbol in symbols:
         try:
-            print(f"\n{'='*50}")
-            print(f"Analysis for {symbol}")
-            print(f"{'='*50}")
+            # Generate analysis for each symbol
             analysis = scalping_analysis.advanced_scalping_analysis(symbol)
-            print(analysis)
+            full_analysis += analysis + "\n\n" + "-"*50 + "\n\n"
         except Exception as e:
             print(f"Error analyzing {symbol}: {e}")
+    
+    # Send analysis to Discord
+    send_discord_message(webhook_url, full_analysis)
+    print("Analysis sent to Discord successfully!")
 
 if __name__ == "__main__":
     main()
