@@ -126,31 +126,37 @@ class MarketAnalysis:
     
     def _plot_ohlcv(self, data, ax, title):
         """Plot OHLCV data on the given axis"""
+        # Reset index for plotting
+        df = data.reset_index()
+        df.index = range(len(df))
+        
         # Plot candlesticks
-        up = data['Close'] > data['Open']
-        down = data['Close'] <= data['Open']
+        up = df['Close'] > df['Open']
+        down = ~up
         
         # Plot up candlesticks
-        ax.bar(data.index[up], data['High'][up] - data['Low'][up], 
-               bottom=data['Low'][up], width=0.8, color='#26a69a', alpha=0.3)
-        ax.bar(data.index[up], data['Close'][up] - data['Open'][up], 
-               bottom=data['Open'][up], width=0.8, color='#26a69a')
+        for idx in df.index[up]:
+            ax.bar(idx, df.loc[idx, 'High'] - df.loc[idx, 'Low'],
+                  bottom=df.loc[idx, 'Low'], width=0.8, color='#26a69a', alpha=0.3)
+            ax.bar(idx, df.loc[idx, 'Close'] - df.loc[idx, 'Open'],
+                  bottom=df.loc[idx, 'Open'], width=0.8, color='#26a69a')
         
         # Plot down candlesticks
-        ax.bar(data.index[down], data['High'][down] - data['Low'][down],
-               bottom=data['Low'][down], width=0.8, color='#ef5350', alpha=0.3)
-        ax.bar(data.index[down], data['Close'][down] - data['Open'][down],
-               bottom=data['Open'][down], width=0.8, color='#ef5350')
+        for idx in df.index[down]:
+            ax.bar(idx, df.loc[idx, 'High'] - df.loc[idx, 'Low'],
+                  bottom=df.loc[idx, 'Low'], width=0.8, color='#ef5350', alpha=0.3)
+            ax.bar(idx, df.loc[idx, 'Close'] - df.loc[idx, 'Open'],
+                  bottom=df.loc[idx, 'Open'], width=0.8, color='#ef5350')
         
-        # Format x-axis
+        # Format x-axis with original timestamps
         times = data.index.strftime('%I:%M %p').str.lstrip('0')
-        ax.set_xticks(range(0, len(data), max(1, len(data)//5)))
-        ax.set_xticklabels(times[::max(1, len(data)//5)], rotation=45)
+        ax.set_xticks(range(0, len(df), max(1, len(df)//5)))
+        ax.set_xticklabels(times[::max(1, len(df)//5)], rotation=45)
         
         # Add volume at the bottom
-        if 'Volume' in data.columns:
+        if 'Volume' in df.columns:
             volume_ax = ax.twinx()
-            volume_ax.bar(data.index, data['Volume'], 
+            volume_ax.bar(df.index, df['Volume'],
                         alpha=0.3, color='gray', width=0.8)
             volume_ax.set_ylabel('Volume')
             volume_ax.tick_params(axis='y', labelcolor='gray')
@@ -161,135 +167,114 @@ class MarketAnalysis:
         ax.grid(True, alpha=0.3)
 
     def analyze_market(self, symbol='ES=F'):
-        """
-        Comprehensive market analysis
-        
-        Args:
-            symbol (str): Stock/futures symbol to analyze
-        
-        Returns:
-            dict: Comprehensive market analysis results
-        """
-        # Fetch market data
-        data, data_error = self.fetch_market_data(symbol)
-        if data_error:
-            return {'error': data_error}
-        
-        # Get additional market info from Yahoo Finance
+        """Comprehensive market analysis"""
         try:
+            # Get data
             ticker = yf.Ticker(symbol)
+            data = ticker.history(period="1d", interval="1m")
             info = ticker.info
             
-            # Get previous day's close for reference
-            prev_day = ticker.history(period='2d', interval='1d')
-            prev_close = float(prev_day['Close'].iloc[0]) if len(prev_day) > 1 else None
-        except Exception as e:
-            info = {}
-            prev_close = None
-            print(f"Warning: Could not fetch additional market data: {e}")
-        
-        # Analyze the last 3 hours (180 minutes)
-        last_data = data.tail(180)
-        close_prices = last_data['Close']
-        returns = close_prices.pct_change()
-
-        # Bollinger Bands
-        window = min(10, len(close_prices))  # 10-period Bollinger Bands for faster responsiveness.
-
-        # Calculate price range using scalar values
-        high_val = float(data['High'].iloc[0])
-        low_val = float(data['Low'].iloc[0])
-        price_range = high_val - low_val
-
-        # Calculate trend using scalar values
-        first_close = float(data['Close'].iloc[0])
-        last_close = float(data['Close'].iloc[-1])
-        
-        # Calculate standard deviation and mean using numpy on values, not Series
-        close_values = close_prices.values
-        cv = float((np.std(close_values) / np.mean(close_values)) * 100)
-        
-        if cv < 0.3:
-            trend = "RANGING"
-        elif last_close > first_close and price_range > 0:
-            trend = "BULLISH"
-        else:
-            trend = "BEARISH"
-
-        # Volatility calculation using numpy on values
-        recent_returns = returns.tail(30)
-        returns_values = recent_returns.dropna().values
-        volatility = float(np.std(returns_values) * np.sqrt(252) * 100)
-
-        # Prepare analysis dictionary with scalar values
-        analysis = {
-            'symbol': 'ES',
-            'current_price': float(close_prices.iloc[-1]),
-            'daily_change': ((last_close - first_close) / first_close) * 100,
-            'volatility': volatility,
-            'market_trend': self.identify_market_trend(data),
-            'technical_chart': self.generate_technical_chart(data, 'ES'),
-            'session_high': high_val,
-            'session_low': low_val,
-            'prev_close': prev_close,
-            'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
-            'avg_volume': info.get('averageVolume', None),
-            'description': info.get('shortName', 'E-mini S&P 500 Futures')
-        }
-
-        # Prepare shorter market data format with spacing
-        market_data = (
-            f"\nES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Volatility: {analysis['volatility']:.1f}%\n"
-            f"Trend: {analysis['market_trend']}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        )
-        
-        # Prepare the API request with shorter prompts
-        payload = {
-            "model": "gpt-4",
-            "messages": [
-                {
-                    "role": "system", 
-                    "content": "You are a market analyst. Provide a brief but insightful analysis focusing on:\n1) Technical interpretation of the current market state\n2) Key factors driving the price action\n3) Short-term directional bias\nDo not repeat the numerical data provided."
-                },
-                {"role": "user", "content": market_data}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 256
-        }
-        
-        try:
-            # Make the API request
-            response = requests.post(
-                'https://api.aimlapi.com/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer 512dc9f0dfe54666b0d98ff42746dd13',
-                    'Content-Type': 'application/json'
-                },
-                json=payload
-            )
-            logging.info(f"API Response Status Code: {response.status_code}")
+            if data.empty:
+                return {'error': 'No data available'}
             
-            # Handle successful responses (both 200 and 201)
-            if response.status_code in [200, 201]:
-                result = response.json()
-                content = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-                # Format the analysis with clear sections
-                ai_analysis = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nMARKET ANALYSIS:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{content}"
-                logging.info(f"Analysis received: {ai_analysis[:10000]}...")
+            # Calculate metrics
+            close_prices = data['Close']
+            returns = close_prices.pct_change()
+            last_data = data.tail(1)
+            
+            # Get scalar values to avoid FutureWarnings
+            high_val = data['High'].iloc[0]
+            low_val = data['Low'].iloc[0]
+            price_range = high_val - low_val
+            
+            first_close = data['Close'].iloc[0]
+            last_close = data['Close'].iloc[-1]
+            
+            # Calculate standard deviation and mean using numpy on values
+            close_values = close_prices.values
+            cv = float((np.std(close_values) / np.mean(close_values)) * 100)
+            
+            if cv < 0.3:
+                trend = "RANGING"
+            elif last_close > first_close and price_range > 0:
+                trend = "BULLISH"
             else:
-                ai_analysis = '\n\nFailed to retrieve analysis'
-                logging.error(f"API Error: {response.text}")
-        except Exception as e:
-            ai_analysis = f'\n\nFailed to retrieve analysis: {str(e)}'
-            logging.error(f"API Error: {str(e)}")
+                trend = "BEARISH"
+            
+            # Volatility calculation using numpy on values
+            recent_returns = returns.tail(30)
+            returns_values = recent_returns.dropna().values
+            volatility = float(np.std(returns_values) * np.sqrt(252) * 100)
+            
+            # Prepare analysis dictionary with scalar values
+            analysis = {
+                'symbol': 'ES',
+                'current_price': last_close,
+                'daily_change': ((last_close - first_close) / first_close) * 100,
+                'volatility': volatility,
+                'market_trend': trend,
+                'technical_chart': self.generate_technical_chart(data, 'ES'),
+                'session_high': high_val,
+                'session_low': low_val,
+                'prev_close': data['Close'].iloc[-2],
+                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
+                'avg_volume': info.get('averageVolume', None),
+                'description': info.get('shortName', 'E-mini S&P 500 Futures')
+            }
+            
+            # Prepare shorter market data format with spacing
+            market_data = (
+                f"\nES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"Volatility: {analysis['volatility']:.1f}%\n"
+                f"Trend: {analysis['market_trend']}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            )
+            
+            # Prepare the API request with shorter prompts
+            payload = {
+                "model": "gpt-4",
+                "messages": [
+                    {
+                        "role": "system", 
+                        "content": "You are a market analyst. Provide a brief but insightful analysis focusing on:\n1) Technical interpretation of the current market state\n2) Key factors driving the price action\n3) Short-term directional bias\nDo not repeat the numerical data provided."
+                    },
+                    {"role": "user", "content": market_data}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 256
+            }
+            
+            try:
+                # Make the API request
+                response = requests.post(
+                    'https://api.aimlapi.com/v1/chat/completions',
+                    headers={
+                        'Authorization': f'Bearer 512dc9f0dfe54666b0d98ff42746dd13',
+                        'Content-Type': 'application/json'
+                    },
+                    json=payload
+                )
+                logging.info(f"API Response Status Code: {response.status_code}")
+                
+                # Handle successful responses (both 200 and 201)
+                if response.status_code in [200, 201]:
+                    result = response.json()
+                    content = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+                    # Format the analysis with clear sections
+                    ai_analysis = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nMARKET ANALYSIS:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{content}"
+                    logging.info(f"Analysis received: {ai_analysis[:10000]}...")
+                else:
+                    ai_analysis = '\n\nFailed to retrieve analysis'
+                    logging.error(f"API Error: {response.text}")
+            except Exception as e:
+                ai_analysis = f'\n\nFailed to retrieve analysis: {str(e)}'
+                logging.error(f"API Error: {str(e)}")
 
-        # Store the AI analysis result
-        analysis['ai_analysis'] = ai_analysis
-        
-        return analysis
+            # Store the AI analysis result
+            analysis['ai_analysis'] = ai_analysis
+            
+            return analysis
 
 def send_discord_message(webhook_url, message, chart_base64=None):
     """
