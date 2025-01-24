@@ -220,12 +220,20 @@ class MarketAnalysis:
         
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        results = f"Current Price: {analysis['current_price']}, Daily Change: {analysis['daily_change']}, Volatility: {analysis['volatility']}, Market Trend: {analysis['market_trend']}, Session High: {analysis['session_high']}, Session Low: {analysis['session_low']}, Previous Close: {analysis['prev_close']}, Volume: {analysis['volume']}, Average Volume: {analysis['avg_volume']}, Description: {analysis['description']}"
+        current_price = analysis['current_price']
+        daily_change = analysis['daily_change']
+        volatility = analysis['volatility']
+        market_trend = analysis['market_trend']
+        results = f"Analyze the market trend and provide insights based on the following data: Current Price: {current_price}, Daily Change: {daily_change}, Volatility: {volatility}, Market Trend: {market_trend}."
         payload = {
-            "prompt": f"Analyze the following market results: {results}",
-            "model": "mistralai/Mistral-7B-Instruct-v0.2",
-            "temperature": 0.7,
-            "max_tokens": 256,
+            "inputs": {
+                "text": results
+            },
+            "parameters": {
+                "model": "mistralai/Mistral-7B-Instruct-v0.2",
+                "temperature": 0.7,
+                "max_tokens": 256,
+            }
         }
         headers = {
             'Authorization': f'Bearer {api_key}',
