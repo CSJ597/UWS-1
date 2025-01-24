@@ -25,7 +25,7 @@ def wait_until_next_run():
     now = datetime.now(et_tz)
     
     # Set target time to 5:30 PM today
-    target = now.replace(hour=17, minute=55, second=0, microsecond=0)
+    target = now.replace(hour=17, minute=33, second=0, microsecond=0)
     
     # If we're past 5:30 PM, move to next day
     if now > target:
@@ -116,7 +116,7 @@ class MarketAnalysis:
             first_close = float(data['Close'].iloc[0])
             last_close = float(data['Close'].iloc[-1])
             
-            if cv < 0.3:
+            if cv < 1.5:
                 return "RANGING"
             elif last_close > first_close and price_range > 0:
                 return "BULLISH TREND"
@@ -160,43 +160,41 @@ class MarketAnalysis:
     
     def _plot_ohlcv(self, data, ax, title):
         """Plot OHLCV data on the given axis"""
-        # Reset index for plotting
-        df = data.reset_index()
-        df.index = range(len(df))
-        
         # Plot price line with gradient fill
-        ax.plot(df.index, df['Close'], 
+        ax.plot(data.index, data['Close'], 
                color='white', linewidth=2, label='Price')
-        
+
         # Add gradient fill
-        ax.fill_between(df.index, df['Close'], df['Close'].min(),
+        ax.fill_between(data.index, data['Close'], data['Close'].min(),
                        alpha=0.1, color='white')
-        
+
         # Add volume at the bottom
-        if 'Volume' in df.columns:
+        if 'Volume' in data.columns:
             volume_ax = ax.twinx()
-            volume_ax.fill_between(df.index, df['Volume'],
+            volume_ax.fill_between(data.index, data['Volume'],
                                alpha=0.15, color='gray')
             volume_ax.set_ylabel('Volume', color='gray')
             volume_ax.tick_params(axis='y', colors='gray')
             volume_ax.grid(False)
-        
+
         # Format x-axis with original timestamps
         times = data.index.strftime('%I:%M %p').str.lstrip('0')
-        ax.set_xticks(range(0, len(df), max(1, len(df)//5)))
-        ax.set_xticklabels(times[::max(1, len(df)//5)], rotation=45)
-        
+        x_ticks = range(0, len(data), max(1, len(data)//5))
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels(times[::max(1, len(data)//5)], rotation=45)
+
         # Customize appearance
         ax.set_title(title, color='white', pad=20)
         ax.set_ylabel('Price', color='white')
         ax.tick_params(colors='white')
         ax.grid(True, alpha=0.2, color='gray')
-        
+
         # Add percentage change
-        pct_change = ((df['Close'].iloc[-1] - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
+        pct_change = ((data['Close'].iloc[-1] - data['Close'].iloc[0]) / data['Close'].iloc[0]) * 100
         ax.text(0.02, 0.95, f'{pct_change:+.2f}%', 
                 transform=ax.transAxes, color='white',
                 fontsize=12, fontweight='bold')
+        logging.info(f'Plotting OHLCV data for {title}. Percentage change: {pct_change:.2f}%')
 
     def check_high_impact_news(self):
         """Check ForexFactory for high-impact news events"""
@@ -336,7 +334,7 @@ class MarketAnalysis:
             close_values = close_prices.values
             cv = float((np.std(close_values) / np.mean(close_values)) * 100)
             
-            if cv < 0.3:
+            if cv < 1.5:
                 trend = "RANGING"
             elif last_close > first_close and price_range > 0:
                 trend = "BULLISH"
