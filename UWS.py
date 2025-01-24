@@ -220,7 +220,16 @@ class MarketAnalysis:
         
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        payload = {'input': 'test'}
+        payload = {
+            "inputs": {
+                "text": "Tell me about the current market trend for E-mini S&P 500 Futures."
+            },
+            "parameters": {
+                "model": "mistralai/Mistral-7B-Instruct-v0.2",
+                "temperature": 0.7,
+                "max_tokens": 256,
+            }
+        }
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
