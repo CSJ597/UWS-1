@@ -292,29 +292,15 @@ class MarketAnalysis:
                 'news_events': news_events
             }
             
-            # Send chart first
-            self.send_to_discord(f"```\nES Technical Chart\n```", analysis['technical_chart'])
+            # Format market data with more context (shorter version)
+            market_data = f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) | H: ${analysis['session_high']:.2f} L: ${analysis['session_low']:.2f} | {trend}"
             
-            # Send price data
-            price_msg = (
-                f"```\nES Analysis\n"
-                f"Current: ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
-                f"High: ${analysis['session_high']:.2f}\n"
-                f"Low: ${analysis['session_low']:.2f}\n"
-                f"Prev Close: ${analysis['prev_close']:.2f}\n"
-                f"Trend: {trend}```"
-            )
-            self.send_to_discord(price_msg)
-            
-            # Send news if available
+            # Add critical news only
             if news_events:
-                news_msg = "```\nHigh Impact News\n"
-                for event in news_events:
-                    news_msg += f"{event['time']} - {event['title']}\n"
-                news_msg += "```"
-                self.send_to_discord(news_msg)
+                next_event = news_events[0]
+                market_data += f"\nNews: {next_event['time']} - {next_event['title']}"
             
-            # Get AI analysis with focused prompt
+            # Get AI analysis with shorter prompt
             payload = {
                 "model": "gpt-4",
                 "messages": [
@@ -322,46 +308,48 @@ class MarketAnalysis:
                         "role": "system", 
                         "content": "Analyze ES price action and key levels. Consider market structure and upcoming news. No indicators."
                     },
-                    {
-                        "role": "user", 
-                        "content": f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) | {trend}"
-                    }
+                    {"role": "user", "content": market_data}
                 ],
                 "temperature": 0.7,
                 "max_tokens": 256
             }
             
             try:
-                headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer sk-123'
-                }
-                response = requests.post('https://api.aimlapi.com/v1/chat/completions', 
-                                      json=payload, headers=headers)
-                
+                # Make the API request
+                response = requests.post(
+                    'https://api.aimlapi.com/v1/chat/completions',
+                    headers={
+                        'Authorization': f'Bearer 512dc9f0dfe54666b0d98ff42746dd13',
+                        'Content-Type': 'application/json'
+                    },
+                    json=payload
+                )
                 logging.info(f"API Response Status Code: {response.status_code}")
                 
+                # Handle successful responses (both 200 and 201)
                 if response.status_code in [200, 201]:
-                    analysis_text = response.json()['choices'][0]['message']['content']
-                    self.send_to_discord(f"```\nMarket Analysis\n{analysis_text}```")
+                    result = response.json()
+                    content = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+                    # Format the analysis with clear sections
+                    ai_analysis = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nMARKET ANALYSIS:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{content}"
+                    logging.info(f"Analysis received: {ai_analysis[:10000]}...")
                 else:
-                    error_msg = response.json()
-                    logging.error(f"API Error: {error_msg}")
-                    analysis_text = "Error getting market analysis."
-                    self.send_to_discord("```\nError getting market analysis```")
-                
-                return {**analysis, 'analysis_text': analysis_text}
-                
+                    ai_analysis = '\n\nFailed to retrieve analysis'
+                    logging.error(f"API Error: {response.text}")
             except Exception as e:
-                logging.error(f"Error in market analysis: {e}")
-                self.send_to_discord("```\nError in market analysis```")
-                return {**analysis, 'error': str(e)}
-        
+                ai_analysis = f'\n\nFailed to retrieve analysis: {str(e)}'
+                logging.error(f"API Error: {str(e)}")
+
+            # Store the AI analysis result
+            analysis['ai_analysis'] = ai_analysis
+            
+            return analysis
+
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
             return {'error': str(e)}
 
-    def send_to_discord(self, message, chart_base64=None):
+    def send_discord_message(self, webhook_url, message, chart_base64=None):
         """Send a message to Discord with optional chart image"""
         try:
             payload = {"content": message}
@@ -372,9 +360,9 @@ class MarketAnalysis:
                 files = {
                     'file': ('chart.png', image_data, 'image/png')
                 }
-                response = requests.post(DISCORD_WEBHOOK_URL, data=payload, files=files)
+                response = requests.post(webhook_url, data=payload, files=files)
             else:
-                response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+                response = requests.post(webhook_url, json=payload)
             
             response.raise_for_status()
             logging.info("Discord message sent successfully")
@@ -462,6 +450,6 @@ if __name__ == "__main__":
     else:
         # Generate and send report
         report, chart = generate_market_report([analysis_results])
-        analyzer.send_to_discord(report, chart)
+        analyzer.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
 
     print("Analysis completed and report sent. Script will stop now.")
