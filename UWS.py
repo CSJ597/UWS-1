@@ -6,8 +6,8 @@ import seaborn as sns
 import requests
 from io import BytesIO
 import base64
+import datetime
 
-# REPLACE THIS WITH YOUR ACTUAL DISCORD WEBHOOK URL
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 
 class MarketAnalysis:
@@ -20,7 +20,7 @@ class MarketAnalysis:
                 'bollinger_window': 20
             }
         }
-        self.allowed_symbols = ['ES=F']
+        self.allowed_symbols = ['ES=F', '^GSPC']
 
     def fetch_market_data(self, symbol):
         """
@@ -145,16 +145,23 @@ def send_discord_message(webhook_url, message, chart_base64=None):
     
     if chart_base64:
         # Prepare the image for Discord
-        payload['file'] = {
-            'chart.png': base64.b64decode(chart_base64)
+        files = {
+            'file': ('chart.png', base64.b64decode(chart_base64), 'image/png')
         }
-    
-    try:
-        response = requests.post(webhook_url, json=payload)
-        response.raise_for_status()
-        print("Message sent successfully to Discord!")
-    except Exception as e:
-        print(f"Error sending message to Discord: {e}")
+        
+        try:
+            response = requests.post(webhook_url, data=payload, files=files)
+            response.raise_for_status()
+            print("Message with chart sent successfully to Discord!")
+        except Exception as e:
+            print(f"Error sending message to Discord: {e}")
+    else:
+        try:
+            response = requests.post(webhook_url, json=payload)
+            response.raise_for_status()
+            print("Message sent successfully to Discord!")
+        except Exception as e:
+            print(f"Error sending message to Discord: {e}")
 
 def generate_market_report(analyses):
     """
@@ -166,7 +173,8 @@ def generate_market_report(analyses):
     Returns:
         tuple: Formatted market report and chart (if available)
     """
-    report = "🚀 Market Analysis Report 📊\n\n"
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    report = f"🚀 Market Analysis Report 📊\nGenerated at: {current_time}\n\n"
     chart = None
     
     for analysis in analyses:
@@ -188,16 +196,11 @@ def generate_market_report(analyses):
     return report, chart
 
 def main():
-    # Validate webhook URL
-    if DISCORD_WEBHOOK_URL == "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw":
-        print("ERROR: Please replace DISCORD_WEBHOOK_URL with your actual Discord webhook URL!")
-        return
-
     # Initialize market analysis
     market_analyzer = MarketAnalysis()
     
     # Analyze ES Futures and S&P 500
-    symbols = ['ES=F']
+    symbols = ['ES=F', '^GSPC']
     
     # Perform analyses
     analyses = [market_analyzer.analyze_market(symbol) for symbol in symbols]
