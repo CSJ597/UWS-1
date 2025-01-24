@@ -325,12 +325,20 @@ class MarketAnalysis:
             trend = "BULLISH"
         else:
             trend = "BEARISH"
+            
+        # Calculate volatility
+        recent_returns = returns.tail(30).dropna()
+        if len(recent_returns) > 0:
+            volatility = float(np.std(recent_returns) * np.sqrt(252) * 100)
+        else:
+            volatility = 0
         
         return {
             'symbol': 'ES',
             'current_price': last_close,
             'daily_change': ((last_close - first_close) / first_close) * 100,
             'market_trend': trend,
+            'volatility': volatility,
             'technical_chart': self.generate_technical_chart(data, 'ES'),
             'session_high': high_val,
             'session_low': low_val,
@@ -340,7 +348,7 @@ class MarketAnalysis:
             'description': info.get('shortName', 'E-mini S&P 500 Futures'),
             'news_events': news_events
         }
-    
+
     def generate_basic_analysis(self, analysis):
         """Generate basic analysis when API is rate limited"""
         current_price = analysis['current_price']
@@ -447,74 +455,59 @@ class MarketAnalysis:
             logging.error(f"Unexpected error sending Discord message: {e}")
 
 def generate_market_report(analyses):
-    """
-    Generate a comprehensive market report
-    
-    Args:
-        analyses (list): List of market analyses
-    
-    Returns:
-        tuple: Formatted market report and chart (if available)
-    """
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    report = f"""
-📈 UWS Market Update 📉
-📅 {current_date}
-📊 E-Mini S&P 500 Mar 25
-{'─' * 15}
-"""
+    """Generate a comprehensive market report from analyses"""
+    report_lines = []
     chart = None
     
     for analysis in analyses:
         if 'error' in analysis:
-            report += f"❌ Error: {analysis['error']}\n\n"
+            report_lines.append(f"Error: {analysis['error']}")
             continue
-        
-        # Trading Insights
-        volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
-        
-        # Calculate price position relative to day's range
-        price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
-        
-        # Format price position description
-        range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
-        
-        # Calculate change from previous close if available
-        prev_close_info = ""
-        if analysis['prev_close']:
-            change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-            arrow = "📈" if change_from_prev > 0 else "📉"
-            prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
             
-        # Determine trend emoji
-        trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
+        # Get the chart from the first valid analysis
+        if not chart and 'technical_chart' in analysis:
+            chart = analysis['technical_chart']
+            
+        # Format the analysis section
+        price = analysis['current_price']
+        change = analysis['daily_change']
+        trend = analysis['market_trend']
+        high = analysis['session_high']
+        low = analysis['session_low']
         
-        # Determine momentum emoji
-        momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
+        # Basic price information
+        report_lines.extend([
+            f"ES Analysis Report",
+            f"Price: ${price:.2f} ({change:+.1f}%)",
+            f"Range: ${low:.2f} - ${high:.2f}",
+            f"Trend: {trend}",
+            ""
+        ])
         
-        report += f"""
-💵 PRICE ACTION
-• Current: **${analysis['current_price']:.2f}** ({range_position})
-• Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
-• Today's Move: **{analysis['daily_change']:+.2f}%** 
-{prev_close_info}
-📊 TECHNICAL SNAPSHOT
-• Market Trend: {trend_emoji} **{analysis['market_trend']}**
-• Volatility: 🌪️ **{analysis['volatility']:.2f}%** ({volatility_status})
-• Range Position: 📍 **{price_position:.1f}%**
-
-🎯 TRADING SIGNALS
-• Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
-• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Calm'} 
-• AI Analysis: {analysis['ai_analysis']}
-{'─' * 15}
-"""
-        
-        # Add chart image if present
-        chart = analysis.get('technical_chart', None)
-
-    return report, chart
-
+        # Add volatility if available
+        if 'volatility' in analysis:
+            vol = analysis['volatility']
+            vol_status = "LOW" if vol < 15 else "HIGH" if vol > 30 else "MODERATE"
+            report_lines.append(f"Volatility: {vol_status} ({vol:.1f}%)")
+            
+        # Add news events if available
+        if analysis.get('news_events'):
+            report_lines.extend([
+                "",
+                "High Impact News Events:"
+            ])
+            for event in analysis['news_events']:
+                report_lines.append(f"{event['time']} - {event['title']}")
+                
+        # Add AI or basic analysis
+        if 'analysis' in analysis:
+            report_lines.extend([
+                "",
+                "Analysis:",
+                analysis['analysis']
+            ])
+            
+    return "\n".join(report_lines), chart
 
 if __name__ == "__main__":
     analyzer = MarketAnalysis()
