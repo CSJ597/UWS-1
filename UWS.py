@@ -221,6 +221,8 @@ class MarketAnalysis:
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
         analysis_response = requests.post('https://api.aimlapi.com/short_analysis', json={'data': analysis, 'model': 'DeepSeek LLM Chat (67B)'}, headers={'Authorization': f'Bearer {api_key}'})
+        logging.info(f"API Response Status Code: {analysis_response.status_code}")
+        logging.info(f"API Response: {analysis_response.text}")
         if analysis_response.status_code == 200:
             ai_analysis = analysis_response.json().get('analysis', 'No analysis available')
         else:
