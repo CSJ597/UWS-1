@@ -9,7 +9,7 @@ on:
     #   * = any day of month
     #   * = any month
     #   1-5 = Monday to Friday
-    - cron: '04 15 * * 1-5'  # Runs at 10:04 AM EST (15:04 UTC)
+    - cron: '9 15 * * 1-5'  # Runs at 10:04 AM EST (15:04 UTC)
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
