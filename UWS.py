@@ -117,15 +117,14 @@ class MarketAnalysis:
 
         # Plot with white line for the price
         plt.plot(est_index, close_prices, label='Close Price', color='white', linewidth=1.5)
-        plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
         plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
         plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
 
-        plt.title('Underground Wall Street\nE-Mini S&P 500 TA', pad=20, color='black')
-        plt.xlabel('Time (EST)')
-        plt.ylabel('Price')
-        plt.legend()
-        plt.grid(True, color='black')
+        plt.title('Underground Wall Street\nE-Mini S&P 500 TA', pad=20, color='white')
+        plt.xlabel('Time (EST)', color='white')
+        plt.ylabel('Price', color='white')
+        plt.legend(facecolor='black', edgecolor='white', fontsize='small', loc='upper left')
+        plt.grid(True, color='white')  # Set grid color to white
 
         # Save plot to buffer with matching facecolor
         buffer = BytesIO()
