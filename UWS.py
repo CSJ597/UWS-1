@@ -176,69 +176,56 @@ class MarketAnalysis:
         # Bollinger Bands
         window = min(10, len(close_prices))  # 10-period Bollinger Bands for faster responsiveness.
 
-        # Trend Analysis
-        first_close = float(close_prices.iloc[0])
-        last_close = float(close_prices.iloc[-1])
-        price_range = float(last_data['High'].iloc[0] - last_data['Low'].iloc[0])
-        cv = float((np.std(close_prices, axis=0) / np.mean(close_prices)) * 100)
+        # Calculate price range using scalar values
+        high_val = float(data['High'].iloc[0])
+        low_val = float(data['Low'].iloc[0])
+        price_range = high_val - low_val
+
+        # Calculate trend using scalar values
+        first_close = float(data['Close'].iloc[0])
+        last_close = float(data['Close'].iloc[-1])
+        
+        # Calculate standard deviation and mean using numpy on values, not Series
+        close_values = close_prices.values
+        cv = float((np.std(close_values) / np.mean(close_values)) * 100)
+        
         if cv < 0.3:
             trend = "RANGING"
         elif last_close > first_close and price_range > 0:
-            trend = "BULLISH TREND"
-        elif last_close < first_close and price_range > 0:
-            trend = "BEARISH TREND"
+            trend = "BULLISH"
         else:
-            trend = "RANGING"
+            trend = "BEARISH"
 
-        # Volatility
-        recent_returns = returns.tail(30)  # Use last 30 minutes for scalping volatility.
-        volatility = float(np.std(recent_returns.dropna(), axis=0) * np.sqrt(252) * 100)
+        # Volatility calculation using numpy on values
+        recent_returns = returns.tail(30)
+        returns_values = recent_returns.dropna().values
+        volatility = float(np.std(returns_values) * np.sqrt(252) * 100)
 
-        # Volume Sensitivity
-        recent_volume = data['Volume'].tail(10).mean()
-        avg_volume = data['Volume'].mean()
-        volume_spike = recent_volume > (1.5 * avg_volume)
-
-        # Compute metrics
-        try:
-            analysis = {
-                'symbol': 'ES',  # Display as ES instead of ES=F
-                'current_price': float(close_prices.iloc[-1]),
-                'daily_change': ((last_close - first_close) / first_close) * 100,
-                'volatility': float(np.std(returns.dropna(), axis=0) * np.sqrt(252) * 100),
-                'market_trend': self.identify_market_trend(data),
-                'technical_chart': self.generate_technical_chart(data, 'ES'),
-                'session_high': float(last_data['High'].iloc[0]),
-                'session_low': float(last_data['Low'].iloc[0]),
-                'prev_close': prev_close,
-                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
-                'avg_volume': info.get('averageVolume', None),
-                'description': info.get('shortName', 'E-mini S&P 500 Futures')
-            }
-        except Exception as e:
-            return {'error': f'Analysis error: {str(e)}'}
-        
-        # Prepare market data for analysis with focused format
-        market_data = (
-            f"ES Price: ${analysis['current_price']:.2f} | "
-            f"24h Change: {analysis['daily_change']:.1f}% | "
-            f"Volatility: {analysis['volatility']:.1f}% | "
-            f"Trend: {analysis['market_trend']} | "
-            f"Range: ${analysis['session_low']:.2f}-${analysis['session_high']:.2f}"
-        )
-        
-        # Prepare the API request
-        api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        headers = {
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
+        # Prepare analysis dictionary with scalar values
+        analysis = {
+            'symbol': 'ES',
+            'current_price': float(close_prices.iloc[-1]),
+            'daily_change': ((last_close - first_close) / first_close) * 100,
+            'volatility': volatility,
+            'market_trend': self.identify_market_trend(data),
+            'technical_chart': self.generate_technical_chart(data, 'ES'),
+            'session_high': high_val,
+            'session_low': low_val,
+            'prev_close': prev_close,
+            'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
+            'avg_volume': info.get('averageVolume', None),
+            'description': info.get('shortName', 'E-mini S&P 500 Futures')
         }
+
+        # Prepare shorter market data format
+        market_data = f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) | Vol:{analysis['volatility']:.1f}% | {analysis['market_trend']}"
         
+        # Prepare the API request with shorter prompts
         payload = {
             "model": "deepseek-ai/deepseek-llm-67b-chat",
             "messages": [
-                {"role": "system", "content": "You are a market analyst. Provide a concise analysis in three parts: 1) Current Market Summary 2) Technical Analysis 3) Short-term Forecast. Be direct and specific."},
-                {"role": "user", "content": f"Analyze this market data and provide actionable insights: {market_data}"}
+                {"role": "system", "content": "Analyze market data and provide: 1)Summary 2)Analysis 3)Forecast"},
+                {"role": "user", "content": market_data}
             ],
             "temperature": 0.7,
             "max_tokens": 256
@@ -248,7 +235,10 @@ class MarketAnalysis:
             # Make the API request
             response = requests.post(
                 'https://api.aimlapi.com/v1/chat/completions',
-                headers=headers,
+                headers={
+                    'Authorization': f'Bearer 512dc9f0dfe54666b0d98ff42746dd13',
+                    'Content-Type': 'application/json'
+                },
                 json=payload
             )
             logging.info(f"API Response Status Code: {response.status_code}")
