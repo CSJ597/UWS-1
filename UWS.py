@@ -234,7 +234,7 @@ class MarketAnalysis:
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
         }
-        analysis_response = requests.post('https://api.aimlapi.com/v1/short_analysis', json=payload, headers=headers)
+        analysis_response = requests.post('https://api.aimlapi.com/v1', json=payload, headers=headers)
         logging.info(f"API Response Status Code: {analysis_response.status_code}")
         logging.info(f"API Response: {analysis_response.text}")
         if analysis_response.status_code == 200:
