@@ -9,6 +9,8 @@ from io import BytesIO
 import base64
 import datetime
 import logging
+from bs4 import BeautifulSoup
+import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +25,8 @@ class MarketAnalysis:
             'interval': '1m',  # 1-minute granularity for scalping.
         }
         self.allowed_symbols = ['ES=F']
-
+        self.eastern_tz = pytz.timezone('US/Eastern')
+    
     def fetch_market_data(self, symbol):
         """
         Fetch comprehensive market data with error handling
@@ -112,11 +115,11 @@ class MarketAnalysis:
         ax2.set_facecolor('#1e222d')
         
         # Plot full timeframe
-        self._plot_ohlcv(data, ax1, f'{symbol} Full View')
+        self._plot_ohlcv(data, ax1, f'UWS: {symbol} Full View')
         
         # Plot last hour
         last_hour_data = data.tail(60)  # Last 60 minutes
-        self._plot_ohlcv(last_hour_data, ax2, f'{symbol} Last Hour')
+        self._plot_ohlcv(last_hour_data, ax2, f'UWS: {symbol} Last Hour')
         
         plt.tight_layout()
         
@@ -136,17 +139,13 @@ class MarketAnalysis:
         df = data.reset_index()
         df.index = range(len(df))
         
-        # Calculate trend for color
-        trend_up = df['Close'].iloc[-1] > df['Close'].iloc[0]
-        line_color = '#26a69a' if trend_up else '#ef5350'
-        
         # Plot price line with gradient fill
         ax.plot(df.index, df['Close'], 
-               color=line_color, linewidth=2, label='Price')
+               color='white', linewidth=2, label='Price')
         
         # Add gradient fill
         ax.fill_between(df.index, df['Close'], df['Close'].min(),
-                       alpha=0.1, color=line_color)
+                       alpha=0.1, color='white')
         
         # Add volume at the bottom
         if 'Volume' in df.columns:
@@ -171,9 +170,70 @@ class MarketAnalysis:
         # Add percentage change
         pct_change = ((df['Close'].iloc[-1] - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
         ax.text(0.02, 0.95, f'{pct_change:+.2f}%', 
-                transform=ax.transAxes, color=line_color,
+                transform=ax.transAxes, color='white',
                 fontsize=12, fontweight='bold')
 
+    def get_high_impact_news(self):
+        """Get high-impact news events from ForexFactory"""
+        try:
+            # Get current date in EST
+            now = datetime.datetime.now(self.eastern_tz)
+            url = f"https://www.forexfactory.com/calendar?day={now.strftime('%b.%d.%Y')}"
+            
+            # Fetch the page
+            response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find all news events
+            events = []
+            rows = soup.find_all('tr', class_='calendar__row')
+            
+            for row in rows:
+                # Check if it's a high-impact US event
+                impact = row.find('div', class_='calendar__impact-icon')
+                if impact and 'high' in str(impact).lower():
+                    country = row.find('td', class_='calendar__currency')
+                    if country and 'USD' in str(country):
+                        # Get event time
+                        time_cell = row.find('td', class_='calendar__time')
+                        if time_cell:
+                            time_str = time_cell.text.strip()
+                            if time_str:
+                                try:
+                                    # Parse the time
+                                    if ':' in time_str:
+                                        hour, minute = map(int, time_str.replace('am', '').replace('pm', '').split(':'))
+                                        if 'pm' in time_str.lower() and hour != 12:
+                                            hour += 12
+                                        elif 'am' in time_str.lower() and hour == 12:
+                                            hour = 0
+                                            
+                                        event_time = now.replace(hour=hour, minute=minute)
+                                        
+                                        # Only include events within next 2 hours
+                                        time_diff = (event_time - now).total_seconds() / 3600
+                                        if -0.5 <= time_diff <= 2:
+                                            # Get event details
+                                            title = row.find('span', class_='calendar__event-title')
+                                            forecast = row.find('td', class_='calendar__forecast')
+                                            previous = row.find('td', class_='calendar__previous')
+                                            
+                                            events.append({
+                                                'time': event_time.strftime('%-I:%M %p ET'),
+                                                'title': title.text.strip() if title else 'Unknown',
+                                                'forecast': forecast.text.strip() if forecast else 'N/A',
+                                                'previous': previous.text.strip() if previous else 'N/A'
+                                            })
+                                except Exception as e:
+                                    logging.error(f"Error parsing event time: {e}")
+                                    continue
+            
+            return events
+            
+        except Exception as e:
+            logging.error(f"Error fetching news: {e}")
+            return []
+            
     def analyze_market(self, symbol='ES=F'):
         """Comprehensive market analysis"""
         try:
@@ -184,6 +244,9 @@ class MarketAnalysis:
             
             if data.empty:
                 return {'error': 'No data available'}
+            
+            # Get upcoming high-impact news
+            news_events = self.get_high_impact_news()
             
             # Calculate metrics
             close_prices = data['Close']
@@ -225,19 +288,46 @@ class MarketAnalysis:
                 'prev_close': data['Close'].iloc[-2],
                 'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
                 'avg_volume': info.get('averageVolume', None),
-                'description': info.get('shortName', 'E-mini S&P 500 Futures')
+                'description': info.get('shortName', 'E-mini S&P 500 Futures'),
+                'news_events': news_events
             }
             
-            # Format market data (shorter version)
-            market_data = f"ES ${analysis['current_price']:.2f} {analysis['daily_change']:.1f}% | {trend}"
+            # Format market data with more context
+            market_data = (
+                f"ES Analysis:\n"
+                f"Current: ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
+                f"Session High: ${analysis['session_high']:.2f}\n"
+                f"Session Low: ${analysis['session_low']:.2f}\n"
+                f"Previous Close: ${analysis['prev_close']:.2f}\n"
+                f"Trend State: {trend}\n"
+            )
             
-            # Get AI analysis with shorter prompt
+            # Add news events if any
+            if news_events:
+                market_data += "\nHigh Impact News:\n"
+                for event in news_events:
+                    market_data += f"{event['time']} - {event['title']}\n"
+            
+            # Get AI analysis with more thorough prompt
             payload = {
                 "model": "gpt-4",
                 "messages": [
                     {
                         "role": "system", 
-                        "content": "Brief market analysis focusing on technical state and bias."
+                        "content": (
+                            "You are analyzing the E-mini S&P 500 futures market. Provide a thorough analysis focusing on:\n"
+                            "1. Price Action: Analyze the current price relative to session high/low and previous close\n"
+                            "2. Market Structure: Identify key price levels and market phases\n"
+                            "3. Momentum: Assess strength of moves and potential reversals\n"
+                            "4. Directional Bias: Determine likely short-term direction\n"
+                            "5. News Impact: Consider any upcoming high-impact news events\n\n"
+                            "Rules:\n"
+                            "- Focus only on price action and market structure\n"
+                            "- Do not reference any technical indicators\n"
+                            "- Be specific about price levels\n"
+                            "- Keep analysis clear and actionable\n"
+                            "- Highlight caution if high-impact news is approaching"
+                        )
                     },
                     {"role": "user", "content": market_data}
                 ],
