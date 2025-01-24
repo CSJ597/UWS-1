@@ -276,14 +276,12 @@ class MarketAnalysis:
             
             return analysis
 
+        except Exception as e:
+            logging.error(f"Market analysis error: {str(e)}")
+            return {'error': str(e)}
+
     def send_discord_message(self, webhook_url, message, chart_base64=None):
-        """Send a message to Discord with optional chart image
-        
-        Args:
-            webhook_url (str): Discord webhook URL
-            message (str): Message to send
-            chart_base64 (str, optional): Base64 encoded chart image
-        """
+        """Send a message to Discord with optional chart image"""
         try:
             payload = {"content": message}
             
