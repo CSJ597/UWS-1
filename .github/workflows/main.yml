@@ -1,10 +1,19 @@
-name: Daily Market Analysis
+name: UWS Market Analysis
 
 on:
   schedule:
-    # Run at 8:50 AM EST (13:50 UTC) on weekdays
-    - cron: '50 13 * * 1-5'
-  workflow_dispatch:  # Allow manual trigger
+    # Run at 8:54 AM EST (13:54 UTC) on weekdays
+    - cron: '54 13 * * 1-5'
+  workflow_dispatch:  # Manual trigger with optional inputs
+    inputs:
+      run_type:
+        description: 'Type of run'
+        required: true
+        default: 'manual'
+        type: choice
+        options:
+          - manual
+          - test
 
 jobs:
   market-analysis:
@@ -28,10 +37,16 @@ jobs:
       env:
         DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
       run: |
-        # For scheduled runs, use auto mode
         if [ "${{ github.event_name }}" = "schedule" ]; then
+          # Scheduled run - use auto mode
+          echo "Running scheduled analysis..."
           python UWS.py --auto
+        elif [ "${{ github.event.inputs.run_type }}" = "test" ]; then
+          # Test run - print to console
+          echo "Running test analysis..."
+          python UWS.py --print
         else
-          # For manual runs, just send to Discord
+          # Manual run - send to Discord
+          echo "Running manual analysis..."
           python UWS.py --discord
         fi
