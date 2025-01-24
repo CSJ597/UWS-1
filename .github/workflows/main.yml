@@ -1,46 +1,24 @@
-name: UWS Update
+name: Market Analysis
 
 on:
   workflow_dispatch:  # Manual trigger
-  schedule:
-    - cron: '30 17 * * 1-5'  # Scheduled run: 2:30 PM UTC (9:30 AM EST) on weekdays
-
-permissions:
-  contents: read
-  actions: write
 
 jobs:
-  market-analysis:
+  analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 0  # No timeout
-
     steps:
-      - name: Debug Info
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Run type: manual"
-          echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-          echo "Timezone info: $(date +%Z) $(date +%z)"
-
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v3
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
-
+          python-version: '3.11'
+          
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install yfinance numpy pandas matplotlib seaborn requests
-
-      - name: Run market analysis continuously
-        run: |
-          while true; do
-            echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-            python UWS.py --auto
-            echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-            echo "Waiting for the next run..."
-            sleep 3600  # Sleep for 1 hour (3600 seconds)
-          done
+        run: pip install -r requirements.txt
+        
+      - name: Run Market Analysis
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: python UWS.py
