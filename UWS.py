@@ -58,6 +58,7 @@ class MarketAnalysis:
             return data, None
         
         except Exception as e:
+            logging.error(f"Error fetching market data for {symbol}: {str(e)}")
             return None, f"Data fetch error for {symbol}: {str(e)}"
 
     def identify_market_trend(self, data):
@@ -104,6 +105,7 @@ class MarketAnalysis:
                 return "RANGING"
         
         except Exception as e:
+            logging.error(f"Error identifying market trend: {str(e)}")
             return f"TREND ANALYSIS ERROR: {str(e)}"
 
     def generate_technical_chart(self, data, symbol):
@@ -285,10 +287,14 @@ class MarketAnalysis:
     def analyze_market(self, symbol='ES=F'):
         """Comprehensive market analysis"""
         try:
+            logging.info("Starting market analysis...")
+            
             # Check for high impact news
+            logging.info("Fetching news events...")
             news_events = self.check_high_impact_news()
             
             # Get MarketWatch news
+            logging.info("Fetching market news...")
             market_news = self.get_marketwatch_news()
             
             # Get data
@@ -297,7 +303,8 @@ class MarketAnalysis:
             info = ticker.info
             
             if data.empty:
-                return {'error': 'No data available'}
+                logging.error("No data received from yfinance")
+                return {'error': 'No market data available'}
             
             # Calculate metrics
             close_prices = data['Close']
@@ -409,11 +416,13 @@ class MarketAnalysis:
                 'news_events': news_events
             })
             
+            logging.info(f"Analysis complete - Price: ${analysis['current_price']:.2f}, Change: {analysis['daily_change']:.2f}%")
+            
             return analysis
             
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
-            raise
+            return {"error": f"Analysis failed: {str(e)}"}
 
     def send_discord_message(self, webhook_url, message, chart_base64=None):
         """Send a message to Discord with optional chart image"""
@@ -530,6 +539,7 @@ class MarketAnalysis:
 
 if __name__ == "__main__":
     market = MarketAnalysis()
+    last_run_time = None
     
     while True:
         try:
@@ -539,29 +549,38 @@ if __name__ == "__main__":
             # Check if it's a weekday (Monday = 0, Sunday = 6)
             if now.weekday() < 5:  # Monday to Friday
                 # Check if it's 5:06 PM
-                if now.hour == 17 and now.minute == 13:
-                    logging.info(f"Starting market analysis at {now}")
+                if now.hour == 17 and now.minute == 6:
+                    # Only run if we haven't already run in this minute
+                    if last_run_time is None or (now - last_run_time).total_seconds() >= 60:
+                        logging.info(f"Starting market analysis at {now}")
+                        
+                        try:
+                            # Run analysis
+                            logging.info("Running market analysis...")
+                            analysis_results = market.analyze_market()
+                            
+                            if 'error' in analysis_results:
+                                logging.error(f"Analysis error: {analysis_results['error']}")
+                                time.sleep(60)
+                                continue
+                            
+                            # Generate report
+                            logging.info("Generating report...")
+                            report, chart = market.generate_market_report([analysis_results])
+                            
+                            # Send to Discord
+                            logging.info("Sending to Discord...")
+                            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+                            
+                            logging.info("Analysis complete, waiting for next run")
+                            last_run_time = now
+                            
+                        except Exception as inner_e:
+                            logging.error(f"Error during analysis: {str(inner_e)}")
+                            time.sleep(60)
+                            continue
                     
-                    try:
-                        # Run analysis
-                        logging.info("Running market analysis...")
-                        analysis_results = market.analyze_market()
-                        
-                        # Generate report
-                        logging.info("Generating report...")
-                        report, chart = market.generate_market_report([analysis_results])
-                        
-                        # Send to Discord
-                        logging.info("Sending to Discord...")
-                        market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
-                        
-                        logging.info("Analysis complete, waiting for next run")
-                    except Exception as inner_e:
-                        logging.error(f"Error during analysis: {str(inner_e)}")
-                        raise
-                    
-                    # Sleep for 60 seconds to avoid running multiple times in the same minute
-                    time.sleep(60)
+                    time.sleep(30)  # Wait 30 seconds before checking again
                 else:
                     # Log current time every 5 minutes
                     if now.minute % 5 == 0 and now.second == 0:
@@ -569,10 +588,8 @@ if __name__ == "__main__":
                     time.sleep(1)
             else:
                 logging.info(f"Weekend detected ({now.strftime('%A')}), sleeping for 1 hour")
-                # On weekends, sleep for 1 hour before checking again
                 time.sleep(3600)
                 
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
-            # Sleep for 60 seconds before retrying on error
             time.sleep(60)
