@@ -2,7 +2,7 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    - cron: '00 17 * * *'  # Scheduled run: 17 AM EST (15:20 UTC)
+    - cron: '02 17 * * *'  # Scheduled run: 17 AM EST (15:20 UTC)
   workflow_dispatch:  # Manual trigger option
 
 permissions:
