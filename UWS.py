@@ -44,55 +44,17 @@ class MarketAnalysis:
             if data.empty:
                 return None, f"No data available for {symbol}"
             
-            # Filter to last 12 hours
-            last_12_hours = data.last('12H')
+            # Get last 12 hours of data
+            last_12_hours = data.tail(12 * 12)  # 12 intervals per hour * 12 hours
+            
             return last_12_hours, None
         
         except Exception as e:
             return None, f"Data fetch error for {symbol}: {str(e)}"
 
-    def identify_market_trend(self, data):
-        """
-        Identify market trend (Trending or Ranging)
-        
-        Args:
-            data (pd.DataFrame): Market price data
-        
-        Returns:
-            str: Market trend classification
-        """
-        if len(data) < 2:
-            return "INSUFFICIENT DATA"
-        
-        # Calculate price range and standard deviation
-        price_range = float(data['High'].max() - data['Low'].min())
-        avg_price = float(data['Close'].mean())
-        
-        # Prevent division by zero
-        if avg_price == 0:
-            return "UNDEFINED"
-        
-        range_percentage = (price_range / avg_price) * 100
-        
-        # Calculate standard deviation and mean
-        price_std = float(data['Close'].std())
-        
-        # Coefficient of variation to assess trend
-        cv = (price_std / avg_price) * 100
-        
-        # Trend classification logic
-        if cv < 0.5:  # Very low variation
-            return "RANGING"
-        elif float(data['Close'].iloc[-1]) > float(data['Close'].iloc[0]) and price_range > 0:
-            return "BULLISH TREND"
-        elif float(data['Close'].iloc[-1]) < float(data['Close'].iloc[0]) and price_range > 0:
-            return "BEARISH TREND"
-        else:
-            return "RANGING"
-
     def generate_technical_chart(self, data, symbol):
         """
-        Generate a comprehensive technical analysis chart
+        Generate a comprehensive technical analysis chart for last 12 hours
         
         Args:
             data (pd.DataFrame): Market price data
@@ -106,7 +68,7 @@ class MarketAnalysis:
         
         # Price and Bollinger Bands
         close_prices = data['Close']
-        window = 20  # Fixed window size
+        window = min(20, len(close_prices))  # Adjust window size if data is less
         
         middle_band = close_prices.rolling(window=window).mean()
         std_dev = close_prices.rolling(window=window).std()
@@ -124,6 +86,7 @@ class MarketAnalysis:
         plt.legend()
         plt.grid(True)
         plt.xticks(rotation=45)
+        plt.tight_layout()
         
         # Save plot to buffer
         buffer = BytesIO()
