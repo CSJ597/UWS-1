@@ -179,8 +179,8 @@ class MarketAnalysis:
         # Trend Analysis
         first_close = float(close_prices.iloc[0])
         last_close = float(close_prices.iloc[-1])
-        price_range = float(last_data['High'].max() - last_data['Low'].min())
-        cv = float((np.std(close_prices) / np.mean(close_prices)) * 100)  # Ensure cv is a scalar
+        price_range = float(last_data['High'].iloc[0] - last_data['Low'].iloc[0])
+        cv = float((np.std(close_prices, axis=0) / np.mean(close_prices)) * 100)
         if cv < 0.3:
             trend = "RANGING"
         elif last_close > first_close and price_range > 0:
@@ -192,7 +192,7 @@ class MarketAnalysis:
 
         # Volatility
         recent_returns = returns.tail(30)  # Use last 30 minutes for scalping volatility.
-        volatility = float(np.std(recent_returns.dropna()) * np.sqrt(252) * 100)
+        volatility = float(np.std(recent_returns.dropna(), axis=0) * np.sqrt(252) * 100)
 
         # Volume Sensitivity
         recent_volume = data['Volume'].tail(10).mean()
@@ -204,14 +204,14 @@ class MarketAnalysis:
             analysis = {
                 'symbol': 'ES',  # Display as ES instead of ES=F
                 'current_price': float(close_prices.iloc[-1]),
-                'daily_change': float(returns.iloc[-1].item() * 100),
-                'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+                'daily_change': ((last_close - first_close) / first_close) * 100,
+                'volatility': float(np.std(returns.dropna(), axis=0) * np.sqrt(252) * 100),
                 'market_trend': self.identify_market_trend(data),
                 'technical_chart': self.generate_technical_chart(data, 'ES'),
-                'session_high': float(last_data['High'].max()),
-                'session_low': float(last_data['Low'].min()),
+                'session_high': float(last_data['High'].iloc[0]),
+                'session_low': float(last_data['Low'].iloc[0]),
                 'prev_close': prev_close,
-                'volume': int(data['Volume'].sum()) if 'Volume' in data else None,
+                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data else None,
                 'avg_volume': info.get('averageVolume', None),
                 'description': info.get('shortName', 'E-mini S&P 500 Futures')
             }
@@ -229,7 +229,7 @@ class MarketAnalysis:
         }
         
         payload = {
-            "model": "deepseek-ai/deepseek-67b-chat",
+            "model": "deepseek-ai/deepseek-llm-67b-chat",
             "messages": [
                 {"role": "system", "content": "You are a professional market analyst. Analyze the given market data and provide detailed insights about the market trends, volatility, and potential outlook."},
                 {"role": "user", "content": f"Please analyze this market data and provide insights: {market_data}"}
