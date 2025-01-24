@@ -2,7 +2,7 @@ name: UWS Market Analysis - Auto
 
 on:
   schedule:
-    - cron: '07 17 * * *'  # Scheduled run: 17:20 AM EST (15:20 UTC)
+    - cron: '11 17 * * *'  # Scheduled run: 3:20 PM UTC (10:20 AM EST)
 
 permissions:
   contents: read
@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 5
     concurrency:
       group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.run_id }}
-      cancel-in-progress: false  # Allow multiple runs to happen
+      cancel-in-progress: false  # Allow multiple runs
 
     steps:
       - name: Debug Info
