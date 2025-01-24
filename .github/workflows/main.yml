@@ -2,11 +2,11 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    - cron: '40 15 * * 1-5'  # Scheduled run: 10:20 AM EST (15:20 UTC)
+    - cron: '*/1 * * * *'  # Runs every 5 minutes
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Run type (scheduled run at 10:20 AM EST will still occur)'
+        description: 'Run type (scheduled run every 5 minutes will still occur)'
         required: false
         default: 'auto'
         type: choice
@@ -23,10 +23,9 @@ jobs:
   market-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Separate concurrency groups for manual and scheduled runs
     concurrency:
       group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.trigger_id || github.run_id }}
-      cancel-in-progress: false  # Do not block scheduled runs due to manual runs or vice versa
+      cancel-in-progress: false  # Prevent overlapping runs
 
     steps:
       - name: Debug Info
@@ -34,8 +33,7 @@ jobs:
           echo "Event name: ${{ github.event_name }}"
           echo "Run type: ${{ github.event.inputs.run_type || 'auto' }}"
           echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-          echo "Timezone info: $(date +%Z) $(date +%z)"
-          echo "Next scheduled run: 10:20 AM EST"
+          echo "This workflow runs every 5 minutes."
 
       - name: Checkout repository
         uses: actions/checkout@v3
