@@ -12,6 +12,7 @@ import logging
 import pytz
 from bs4 import BeautifulSoup
 from datetime import timedelta
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -442,16 +443,15 @@ MARKET ANALYSIS: {current_date}
 💵 PRICE ACTION
 • Current: **${analysis['current_price']:.2f}** ({range_position})
 • Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
-• Today's Move: **{analysis['daily_change']:+.2f}%** 
 {prev_close_info}
-📊 TECHNICAL SNAPSHOT
-• Market Trend: {trend_emoji} **{analysis['market_trend']}**
-• Volatility: 🌪️ **{analysis['volatility']:.2f}%** ({volatility_status})
-• Range Position: 📍 **{price_position:.1f}%**
+• Daily Change: {arrow} {analysis['daily_change']:.2f}%
 
-🎯 TRADING SIGNALS
-• Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
-• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Calm'} 
+📊 MARKET CONDITIONS
+• Trend: {trend_emoji} {analysis['market_trend']}
+• Volatility: {volatility_status}
+• Momentum: {momentum_emoji} {abs(analysis['daily_change']):.1f}%
+
+📝 ANALYSIS
 • AI Analysis: {analysis['ai_analysis']}
 {'─' * 15}
 """
@@ -460,17 +460,36 @@ MARKET ANALYSIS: {current_date}
             chart = analysis.get('technical_chart', None)
 
         return report, chart
+    except Exception as e:
+        logging.error(f"Error generating report: {str(e)}")
+        return f"Error generating report: {str(e)}", None
 
 
 if __name__ == "__main__":
-    analyzer = MarketAnalysis()
-    analysis_results = analyzer.analyze_market()
+    # Initialize market analysis
+    market = MarketAnalysis()
     
-    if 'error' in analysis_results:
-        print(f"Error in analysis: {analysis_results['error']}")
-    else:
-        # Generate and send report
-        report, chart = generate_market_report([analysis_results])
-        analyzer.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
-
-    print("Analysis completed and report sent. Script will stop now.")
+    while True:
+        try:
+            print(f"Starting market analysis at {datetime.now(pytz.UTC)}")
+            
+            # Perform analysis
+            analysis_results = market.analyze_market()
+            
+            # Generate report
+            report, chart = generate_market_report([analysis_results])
+            
+            # Send to Discord
+            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+            
+            print("Analysis completed and report sent. Script will stop now.")
+            print(f"Finished market analysis at {datetime.now(pytz.UTC)}")
+            print("Waiting for the next run...")
+            
+            # Wait before next analysis
+            time.sleep(60)  # Wait 1 minute
+            
+        except Exception as e:
+            logging.error(f"Market analysis error: {str(e)}")
+            print(f"Error in analysis: {str(e)}")
+            time.sleep(60)  # Wait before retrying
