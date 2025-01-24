@@ -1,36 +1,31 @@
-name: Scalping Analysis Workflow
+name: Daily Market Analysis
 
 on:
-  # Trigger this workflow on push and pull requests to the main branch
-  push:
-    branches:
-      - main
-  # Schedule it to run once every day at 8:00 AM UTC (before market open)
   schedule:
-    - cron: "0 8 * * *"
+    # Run at 9:30 AM EST (14:30 UTC)
+    - cron: '30 14 * * 1-5'  # Monday to Friday
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  scalping-analysis:
+  market-analysis:
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
-
+      uses: actions/checkout@v3
+      
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.8'  # You can adjust the Python version as needed
-
+        python-version: '3.9'
+        
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run scalping analysis script
+        pip install yfinance numpy pandas matplotlib seaborn requests
+        
+    - name: Run market analysis
+      env:
+        DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
       run: |
-        python UWS.py
-
-    - name: Notify result (optional)
-      run: |
-        echo "Scalping analysis completed!"  # This can be modified to send notifications
+        python market_analysis.py --discord
