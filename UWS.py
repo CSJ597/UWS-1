@@ -5,64 +5,18 @@ import yfinance as yf
 
 class ScalpingAnalysis:
     def __init__(self):
-        pass
-
+        # API keys (if using additional APIs, can be added here later)
+        self.finnhub_api_key = "your_finnhub_api_key_here"
+        
     def get_yahoo_data(self):
         """Fetch data from Yahoo Finance"""
         try:
-            # Fetch data for the E-mini S&P 500 Futures (ES=F)
-            data = yf.download("ES=F", period="1d", interval="1m")
+            data = yf.download('ES=F', period='1d', interval='5m')
             return data
         except Exception as e:
-            print(f"Error fetching Yahoo data: {e}")
+            print(f"Yahoo Finance Data Fetch Error: {e}")
             return pd.DataFrame()
-
-    def advanced_scalping_analysis(self):
-        """Comprehensive scalping preparation analysis"""
-        # Fetch data from Yahoo
-        data = self.get_yahoo_data()
         
-        if data.empty:
-            return "Unable to fetch market data"
-
-        # Price analysis
-        close_prices = data['Close']
-
-        # Volatility calculation
-        returns = close_prices.pct_change()
-        volatility = {
-            'historical_volatility': returns.std() * np.sqrt(252) * 100,
-            'current_daily_change': returns.iloc[-1] * 100
-        }
-
-        # Technical indicators (simplified for demonstration)
-        macd = self._custom_macd(close_prices)
-        rsi = self._custom_rsi(close_prices)
-
-        # Compile comprehensive analysis
-        analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
-
-💰 MARKET DATA SOURCES:
-- Yahoo Finance: {'✅ Loaded' if not data.empty else '❌ Failed'}
-
-📊 MARKET STRUCTURE:
-- Current Price: ${close_prices.iloc[-1]:,.2f}
-
-📈 MARKET METRICS:
-- Historical Volatility: {volatility['historical_volatility']:,.2f}%
-- Daily Price Change: {volatility['current_daily_change']:,.2f}%
-
-🚀 TECHNICAL INDICATORS:
-- MACD Line: {macd['macd_line']:,.4f}
-- MACD Signal: {macd['signal_line']:,.4f}
-- MACD Histogram: {macd['histogram']:,.4f}
-- RSI: {rsi:,.2f}
-
-💡 SCALPING INSIGHTS:
-{self._generate_scalping_insights(macd, rsi, volatility)}
-"""
-        return analysis
-
     def _custom_macd(self, prices, fast_period=12, slow_period=26, signal_period=9):
         """Custom MACD calculation"""
         exp1 = prices.ewm(span=fast_period, adjust=False).mean()
@@ -92,6 +46,77 @@ class ScalpingAnalysis:
         
         return rsi.iloc[-1]
 
+    def get_market_sentiment(self):
+        """Fetch market sentiment and news from Finnhub"""
+        try:
+            news_url = f"https://finnhub.io/api/v1/news?category=general&token={self.finnhub_api_key}"
+            news_response = requests.get(news_url)
+            news_data = news_response.json()[:3]  # Top 3 news items
+            
+            return {
+                "news": [
+                    {
+                        "headline": news.get("headline", "No Headline"),
+                        "summary": news.get("summary", "No Summary")
+                    } for news in news_data
+                ]
+            }
+        except Exception as e:
+            print(f"Market Sentiment Error: {e}")
+            return {"error": str(e)}
+
+    def advanced_scalping_analysis(self):
+        """Comprehensive scalping preparation analysis"""
+        # Fetch data from Yahoo Finance
+        data = self.get_yahoo_data()
+        
+        if data.empty:
+            return "Unable to fetch market data"
+        
+        # Price analysis
+        close_prices = data['Close']
+        
+        # Volatility calculation
+        returns = close_prices.pct_change()
+        volatility = {
+            'historical_volatility': returns.std() * np.sqrt(252) * 100,
+            'current_daily_change': returns.iloc[-1] * 100
+        }
+        
+        # Technical indicators
+        macd = self._custom_macd(close_prices)
+        rsi = self._custom_rsi(close_prices)
+        
+        # Market sentiment
+        sentiment = self.get_market_sentiment()
+        
+        # Compile comprehensive analysis
+        analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
+
+💰 MARKET DATA SOURCES:
+- Yahoo Finance: {'✅ Loaded' if not data.empty else '❌ Failed'}
+
+📊 MARKET STRUCTURE:
+- Current Price: ${close_prices.iloc[-1]:,.2f}
+
+📈 MARKET METRICS:
+- Historical Volatility: {volatility['historical_volatility']:,.2f}%
+- Daily Price Change: {volatility['current_daily_change']:,.2f}%
+
+🚀 TECHNICAL INDICATORS:
+- MACD Line: {macd['macd_line']:,.4f}
+- MACD Signal: {macd['signal_line']:,.4f}
+- MACD Histogram: {macd['histogram']:,.4f}
+- RSI: {rsi:,.2f}
+
+🌐 MARKET SENTIMENT:
+{chr(10).join(f'• {news["headline"]}' for news in sentiment.get('news', [])[:2])}
+
+💡 SCALPING INSIGHTS:
+{self._generate_scalping_insights(macd, rsi, volatility)}
+"""
+        return analysis
+
     def _generate_scalping_insights(self, macd, rsi, volatility):
         """Generate scalping insights based on indicators"""
         insights = []
@@ -119,7 +144,7 @@ class ScalpingAnalysis:
         return chr(10).join(insights)
 
 def send_discord_message(message):
-    webhook_url = "https://discord.com/api/webhooks/1326703378687983627/jYdBBNSOwNJt6fCP42rzfZspgVAHk5ge4SIbAVS1o0PiOXu4CJ8xbZsxLpTrJqqFYJln"
+    webhook_url = "your_discord_webhook_url_here"
     max_length = 2000
     for i in range(0, len(message), max_length):
         chunk = message[i:i+max_length]
