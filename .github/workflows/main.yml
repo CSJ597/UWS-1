@@ -2,16 +2,17 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    # Run at exactly 9:28:00 AM EST (14:28:00 UTC) on weekdays
-    - cron: '28 14 * * 1-5'
+    # Run at exactly 9:26:00 AM EST (14:26:00 UTC) on weekdays
+    - cron: '29 14 * * 1-5'
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
         description: 'Type of run'
         required: true
-        default: 'manual'
+        default: 'auto'
         type: choice
         options:
+          - auto
           - manual
           - test
 
@@ -60,9 +61,9 @@ jobs:
         fi
         
         echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        if [ "${{ github.event_name }}" = "schedule" ]; then
-          # Scheduled run - use auto mode
-          echo "Running scheduled analysis..."
+        if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
+          # Scheduled or auto run
+          echo "Running auto analysis..."
           python UWS.py --auto
         elif [ "${{ github.event.inputs.run_type }}" = "test" ]; then
           # Test run - print to console
