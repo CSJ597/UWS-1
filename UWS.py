@@ -351,6 +351,7 @@ class MarketAnalysis:
             
             # Add market news to the prompt
             news_context = ""
+            news_snippet = ""
             if market_news:
                 news_snippet = " | ".join([f"{item['snippet']}" for item in market_news[:3]])  # Get snippets of top 3 headlines
                 news_context = f"\nRecent Headlines: {news_snippet}\n"
