@@ -14,8 +14,8 @@ class MarketAnalysis:
     def __init__(self):
         """Initialize analysis with default configurations"""
         self.analysis_config = {
-            'period': '1d',  # Changed to 1 day
-            'interval': '2m',  # Changed from 5m to 2m
+            'period': '7h',  # Last 7 hours for most recent session focus.
+            'interval': '1m',  # 1-minute granularity for scalping.
         }
         self.allowed_symbols = ['ES=F']
 
@@ -44,10 +44,7 @@ class MarketAnalysis:
             if data.empty:
                 return None, f"No data available for {symbol}"
             
-            # Get last 12 hours of data
-            last_12_hours = data.tail(12 * 6)  # 6 intervals per hour * 12 hours
-            
-            return last_12_hours, None
+            return data, None
         
         except Exception as e:
             return None, f"Data fetch error for {symbol}: {str(e)}"
@@ -86,7 +83,7 @@ class MarketAnalysis:
             first_close = float(data['Close'].iloc[0])
             last_close = float(data['Close'].iloc[-1])
             
-            if cv < 0.5:  # Very low variation
+            if cv < 0.3:
                 return "RANGING"
             elif last_close > first_close and price_range > 0:
                 return "BULLISH TREND"
@@ -177,26 +174,48 @@ class MarketAnalysis:
             prev_close = None
             print(f"Warning: Could not fetch additional market data: {e}")
         
-        # Analyze data
-        close_prices = data['Close']
+        # Analyze the last 3 hours (180 minutes)
+        last_data = data.tail(180)
+        close_prices = last_data['Close']
         returns = close_prices.pct_change()
-        current_price = float(close_prices.iloc[-1].item())
-        
-        # Calculate session high and low
-        session_high = float(data['High'].max())
-        session_low = float(data['Low'].min())
-        
+
+        # Bollinger Bands
+        window = min(10, len(close_prices))  # 10-period Bollinger Bands for faster responsiveness.
+
+        # Trend Analysis
+        first_close = close_prices.iloc[0]
+        last_close = close_prices.iloc[-1]
+        price_range = last_data['High'].max() - last_data['Low'].min()
+        cv = (np.std(close_prices) / np.mean(close_prices)) * 100
+        if cv < 0.3:
+            trend = "RANGING"
+        elif last_close > first_close and price_range > 0:
+            trend = "BULLISH TREND"
+        elif last_close < first_close and price_range > 0:
+            trend = "BEARISH TREND"
+        else:
+            trend = "RANGING"
+
+        # Volatility
+        recent_returns = returns.tail(30)  # Use last 30 minutes for scalping volatility.
+        volatility = float(np.std(recent_returns.dropna()) * np.sqrt(252) * 100)
+
+        # Volume Sensitivity
+        recent_volume = data['Volume'].tail(10).mean()
+        avg_volume = data['Volume'].mean()
+        volume_spike = recent_volume > (1.5 * avg_volume)
+
         # Compute metrics
         try:
             analysis = {
                 'symbol': 'ES',  # Display as ES instead of ES=F
-                'current_price': current_price,
+                'current_price': float(close_prices.iloc[-1].item()),
                 'daily_change': float(returns.iloc[-1].item() * 100),
                 'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
                 'market_trend': self.identify_market_trend(data),
                 'technical_chart': self.generate_technical_chart(data, 'ES'),
-                'session_high': session_high,
-                'session_low': session_low,
+                'session_high': float(last_data['High'].max()),
+                'session_low': float(last_data['Low'].min()),
                 'prev_close': prev_close,
                 'volume': int(data['Volume'].sum()) if 'Volume' in data else None,
                 'avg_volume': info.get('averageVolume', None),
