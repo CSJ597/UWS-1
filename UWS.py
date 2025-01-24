@@ -549,7 +549,7 @@ if __name__ == "__main__":
             # Check if it's a weekday (Monday = 0, Sunday = 6)
             if now.weekday() < 5:  # Monday to Friday
                 # Check if it's 5:06 PM
-                if now.hour == 17 and now.minute == 6:
+                if now.hour == 17 and now.minute == 17:
                     # Only run if we haven't already run in this minute
                     if last_run_time is None or (now - last_run_time).total_seconds() >= 60:
                         logging.info(f"Starting market analysis at {now}")
