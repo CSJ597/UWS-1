@@ -142,9 +142,7 @@ class MarketAnalysis:
         
         # Plot price line with gradient fill
         ax.plot(df.index, df['Close'], 
-               color=line_color, linewidth=2, label='Price',
-               path_effects=[plt.matplotlib.patheffects.withSimplePatchShadow(
-                   offset=(0, 1), alpha=0.3, rho=0.1)])
+               color=line_color, linewidth=2, label='Price')
         
         # Add gradient fill
         ax.fill_between(df.index, df['Close'], df['Close'].min(),
