@@ -529,30 +529,38 @@ class MarketAnalysis:
 
 
 if __name__ == "__main__":
-    # Initialize market analysis
     market = MarketAnalysis()
     
     while True:
         try:
-            print(f"Starting market analysis at {datetime.now(pytz.UTC)}")
+            # Get current time
+            now = datetime.now()
             
-            # Perform analysis
-            analysis_results = market.analyze_market()
-            
-            # Generate report
-            report, chart = market.generate_market_report([analysis_results])
-            
-            # Send to Discord
-            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
-            
-            print("Analysis completed and report sent. Script will stop now.")
-            print(f"Finished market analysis at {datetime.now(pytz.UTC)}")
-            print("Waiting for the next run...")
-            
-            # Wait before next analysis
-            time.sleep(60)  # Wait 1 minute
-            
+            # Check if it's a weekday (Monday = 0, Sunday = 6)
+            if now.weekday() < 5:  # Monday to Friday
+                # Check if it's 6:00 PM
+                if now.hour == 18 and now.minute == 0:
+                    logging.info(f"Starting market analysis at {now}")
+                    
+                    # Run analysis
+                    analysis_results = market.analyze_market()
+                    
+                    # Generate report
+                    report, chart = market.generate_market_report([analysis_results])
+                    
+                    # Send to Discord
+                    market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+                    
+                    # Sleep for 60 seconds to avoid running multiple times in the same minute
+                    time.sleep(60)
+                else:
+                    # Sleep for 30 seconds before checking again
+                    time.sleep(30)
+            else:
+                # On weekends, sleep for 1 hour before checking again
+                time.sleep(3600)
+                
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
-            print(f"Error in analysis: {str(e)}")
-            time.sleep(60)  # Wait before retrying
+            # Sleep for 60 seconds before retrying on error
+            time.sleep(60)
