@@ -266,19 +266,11 @@ def generate_market_report(analyses):
         volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
         
         # Calculate price position relative to day's range
-        if analysis['session_high'] != analysis['session_low']:
-            price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100
-        else:
-            price_position = 50  # Default to middle if no range
-            
+        price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+        
         # Format price position description
-        if price_position > 75:
-            range_position = "NEAR HIGH 🔝"
-        elif price_position < 25:
-            range_position = "NEAR LOW 📉"
-        else:
-            range_position = "MID-RANGE ↔️"
-            
+        range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
+        
         # Calculate change from previous close if available
         prev_close_info = ""
         if analysis['prev_close']:
@@ -294,14 +286,14 @@ def generate_market_report(analyses):
         
         report += f"""
 💵 PRICE ACTION
-• Current: ${analysis['current_price']:.2f} ({range_position})
-• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
-• Today's Move: {analysis['daily_change']:+.2f}% 
+• Current: **${analysis['current_price']:.2f}** ({range_position})
+• Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
+• Today's Move: **{analysis['daily_change']:+.2f}%** 
 {prev_close_info}
 📊 TECHNICAL SNAPSHOT
-• Market Trend: {trend_emoji} {analysis['market_trend']}
-• Volatility: 🌪️ {analysis['volatility']:.2f}% ({volatility_status})
-• Range Position: 📍 {price_position:.1f}%
+• Market Trend: {trend_emoji} **{analysis['market_trend']}**
+• Volatility: 🌪️ **{analysis['volatility']:.2f}%** ({volatility_status})
+• Range Position: 📍 **{price_position:.1f}%**
 
 🎯 TRADING SIGNALS
 • Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
@@ -319,6 +311,7 @@ def generate_market_report(analyses):
         if not chart:
             chart = analysis['technical_chart']
     
+    report += "\n🔍 Summary: Review key metrics for trading decisions."
     return report, chart
 
 def main():
