@@ -10,6 +10,7 @@ from io import BytesIO
 import base64
 import datetime
 import logging
+from openai import OpenAI
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -218,38 +219,36 @@ class MarketAnalysis:
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
         
-        # Prepare the payload for the AIML API request
+        # Initialize OpenAI client with correct base URL
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        current_price = analysis['current_price']
-        daily_change = analysis['daily_change']
-        volatility = analysis['volatility']
-        market_trend = analysis['market_trend']
-        payload = {
-            "inputs": {
-                "text": f"Analyze the market trend and provide insights based on the following data: Current Price: {current_price}, Daily Change: {daily_change}, Volatility: {volatility}, Market Trend: {market_trend}."
-            },
-            "parameters": {
-                "model": "mistralai/Mistral-7B-Instruct-v0.2",
-                "temperature": 0.7,
-                "max_tokens": 256,
-            }
-        }
-        headers = {
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
-        }
-        analysis_response = requests.post('https://api.aimlapi.com/v1', json=payload, headers=headers)
-        logging.info(f"API Response Status Code: {analysis_response.status_code}")
-        logging.info(f"API Response: {analysis_response.text}")
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.aimlapi.com"
+        )
 
-        # Handle the API response
-        if analysis_response.status_code == 200:
-            result = analysis_response.json()
-            ai_analysis = result.get('generated_text', 'No analysis available')
-        else:
-            ai_analysis = 'Failed to retrieve analysis'
+        # Prepare market data for analysis
+        market_data = f"Current Price: {analysis['current_price']}, Daily Change: {analysis['daily_change']}, Volatility: {analysis['volatility']}, Market Trend: {analysis['market_trend']}, Session High: {analysis['session_high']}, Session Low: {analysis['session_low']}, Previous Close: {analysis['prev_close']}, Volume: {analysis['volume']}, Average Volume: {analysis['avg_volume']}"
+        
+        try:
+            # Create chat completion with correct model name and format
+            completion = client.chat.completions.create(
+                model="deepseek-ai/deepseek-67b-chat",
+                messages=[
+                    {"role": "system", "content": "You are a professional market analyst. Analyze the given market data and provide detailed insights about the market trends, volatility, and potential outlook."},
+                    {"role": "user", "content": f"Please analyze this market data and provide insights: {market_data}"}
+                ],
+                temperature=0.7,
+                max_tokens=256
+            )
+            
+            # Extract the response
+            ai_analysis = completion.choices[0].message.content
+            logging.info(f"API Response: {ai_analysis}")
+        except Exception as e:
+            ai_analysis = f'Failed to retrieve analysis: {str(e)}'
+            logging.error(f"API Error: {str(e)}")
 
-        # Store the AI analysis result in the analysis dictionary
+        # Store the AI analysis result
         analysis['ai_analysis'] = ai_analysis
         
         return analysis
