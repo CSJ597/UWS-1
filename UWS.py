@@ -261,14 +261,17 @@ class MarketAnalysis:
             
             for article in article_elements[:5]:  # Get latest 5 news items
                 title_elem = article.find('h3', class_='article__headline')
+                snippet_elem = article.find('p', class_='article__summary')
                 time_elem = article.find('span', class_='article__timestamp')
                 
-                if title_elem and time_elem:
+                if title_elem and snippet_elem and time_elem:
                     title = title_elem.text.strip()
+                    snippet = snippet_elem.text.strip()
                     timestamp = time_elem.text.strip()
                     
                     news_items.append({
                         'title': title,
+                        'snippet': snippet,
                         'time': timestamp
                     })
             
@@ -349,7 +352,7 @@ class MarketAnalysis:
             # Add market news to the prompt
             news_context = ""
             if market_news:
-                news_snippet = " | ".join([f"{item['title']}" for item in market_news[:3]])  # Get titles of top 3 headlines
+                news_snippet = " | ".join([f"{item['snippet']}" for item in market_news[:3]])  # Get snippets of top 3 headlines
                 news_context = f"\nRecent Headlines: {news_snippet}\n"
             
             market_data = (
