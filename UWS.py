@@ -220,16 +220,7 @@ class MarketAnalysis:
         
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        payload = {
-            "prompt": "Analyze the market trend and provide insights.",
-            "input": analysis,
-            "model": "DeepSeek LLM Chat (67B)",
-            "max_tokens": 2048,
-            "temperature": 0.7,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        }
+        payload = {'input': 'test'}
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
