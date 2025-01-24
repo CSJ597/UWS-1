@@ -10,7 +10,6 @@ from io import BytesIO
 import base64
 import datetime
 import logging
-from openai import OpenAI
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -219,31 +218,42 @@ class MarketAnalysis:
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
         
-        # Initialize OpenAI client with correct base URL
-        api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://api.aimlapi.com"
-        )
-
         # Prepare market data for analysis
         market_data = f"Current Price: {analysis['current_price']}, Daily Change: {analysis['daily_change']}, Volatility: {analysis['volatility']}, Market Trend: {analysis['market_trend']}, Session High: {analysis['session_high']}, Session Low: {analysis['session_low']}, Previous Close: {analysis['prev_close']}, Volume: {analysis['volume']}, Average Volume: {analysis['avg_volume']}"
         
+        # Prepare the API request
+        api_key = '512dc9f0dfe54666b0d98ff42746dd13'
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            "model": "deepseek-ai/deepseek-67b-chat",
+            "messages": [
+                {"role": "system", "content": "You are a professional market analyst. Analyze the given market data and provide detailed insights about the market trends, volatility, and potential outlook."},
+                {"role": "user", "content": f"Please analyze this market data and provide insights: {market_data}"}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 256
+        }
+        
         try:
-            # Create chat completion with correct model name and format
-            completion = client.chat.completions.create(
-                model="deepseek-ai/deepseek-67b-chat",
-                messages=[
-                    {"role": "system", "content": "You are a professional market analyst. Analyze the given market data and provide detailed insights about the market trends, volatility, and potential outlook."},
-                    {"role": "user", "content": f"Please analyze this market data and provide insights: {market_data}"}
-                ],
-                temperature=0.7,
-                max_tokens=256
+            # Make the API request
+            response = requests.post(
+                'https://api.aimlapi.com/v1/chat/completions',
+                headers=headers,
+                json=payload
             )
+            logging.info(f"API Response Status Code: {response.status_code}")
+            logging.info(f"API Response: {response.text}")
             
-            # Extract the response
-            ai_analysis = completion.choices[0].message.content
-            logging.info(f"API Response: {ai_analysis}")
+            if response.status_code == 200:
+                result = response.json()
+                ai_analysis = result.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis available')
+            else:
+                ai_analysis = 'Failed to retrieve analysis'
+                logging.error(f"API Error: {response.text}")
         except Exception as e:
             ai_analysis = f'Failed to retrieve analysis: {str(e)}'
             logging.error(f"API Error: {str(e)}")
