@@ -3,7 +3,7 @@ name: UWS Update
 on:
   workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: '26 17 * * 1-5'  # Scheduled run: 2:30 PM UTC (9:30 AM EST) on weekdays
+    - cron: '30 17 * * 1-5'  # Scheduled run: 2:30 PM UTC (9:30 AM EST) on weekdays
 
 permissions:
   contents: read
