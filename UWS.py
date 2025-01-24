@@ -25,7 +25,7 @@ def wait_until_next_run():
     now = datetime.now(et_tz)
     
     # Set target time to 5:30 PM today
-    target = now.replace(hour=17, minute=33, second=0, microsecond=0)
+    target = now.replace(hour=17, minute=40, second=0, microsecond=0)
     
     # If we're past 5:30 PM, move to next day
     if now > target:
