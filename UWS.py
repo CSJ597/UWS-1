@@ -7,18 +7,40 @@ import requests
 import io
 from io import BytesIO
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import pytz
 from bs4 import BeautifulSoup
-from datetime import timedelta
+import re
 import time
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
+
+def wait_until_next_run():
+    """Wait until the next scheduled run (5:30 PM on weekdays)"""
+    et_tz = pytz.timezone('US/Eastern')
+    now = datetime.now(et_tz)
+    
+    # Set target time to 5:30 PM today
+    target = now.replace(hour=17, minute=33, second=0, microsecond=0)
+    
+    # If we're past 5:30 PM, move to next day
+    if now > target:
+        target += timedelta(days=1)
+    
+    # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
+    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
+        target += timedelta(days=1)
+    
+    # Calculate sleep duration
+    sleep_seconds = (target - now).total_seconds()
+    if sleep_seconds > 0:
+        next_run = target.strftime('%Y-%m-%d %I:%M %p ET')
+        logging.info(f"Waiting until next run at {next_run}")
+        time.sleep(sleep_seconds)
 
 class MarketAnalysis:
     def __init__(self):
@@ -529,14 +551,18 @@ class MarketAnalysis:
 
 
 if __name__ == "__main__":
-    # Initialize market analysis
     market = MarketAnalysis()
     
     while True:
         try:
-            print(f"Starting market analysis at {datetime.now(pytz.UTC)}")
+            # Wait until next scheduled run
+            wait_until_next_run()
             
-            # Perform analysis
+            # Log start time
+            start_time = datetime.now(pytz.timezone('US/Eastern'))
+            logging.info(f"Starting market analysis at {start_time}")
+            
+            # Run analysis
             analysis_results = market.analyze_market()
             
             # Generate report
@@ -545,14 +571,8 @@ if __name__ == "__main__":
             # Send to Discord
             market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
             
-            print("Analysis completed and report sent. Script will stop now.")
-            print(f"Finished market analysis at {datetime.now(pytz.UTC)}")
-            print("Waiting for the next run...")
-            
-            # Wait before next analysis
-            time.sleep(60)  # Wait 1 minute
+            logging.info("Analysis complete")
             
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
-            print(f"Error in analysis: {str(e)}")
-            time.sleep(60)  # Wait before retrying
+            time.sleep(60)  # Wait a minute before retrying on error
