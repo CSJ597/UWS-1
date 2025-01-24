@@ -65,31 +65,38 @@ class MarketAnalysis:
         if len(data) < 2:
             return "INSUFFICIENT DATA"
         
-        # Calculate price range and standard deviation
-        price_range = data['High'].max() - data['Low'].min()
-        avg_price = data['Close'].mean()
+        try:
+            # Calculate price range and standard deviation
+            price_range = float(data['High'].max() - data['Low'].min())
+            
+            # Use .item() to convert Series to scalar
+            avg_price = float(data['Close'].mean().item())
+            
+            # Prevent division by zero
+            if avg_price == 0:
+                return "UNDEFINED"
+            
+            # Calculate standard deviation
+            price_std = float(data['Close'].std().item())
+            
+            # Coefficient of variation to assess trend
+            cv = (price_std / avg_price) * 100
+            
+            # Trend classification logic
+            first_close = float(data['Close'].iloc[0])
+            last_close = float(data['Close'].iloc[-1])
+            
+            if cv < 0.5:  # Very low variation
+                return "RANGING"
+            elif last_close > first_close and price_range > 0:
+                return "BULLISH TREND"
+            elif last_close < first_close and price_range > 0:
+                return "BEARISH TREND"
+            else:
+                return "RANGING"
         
-        # Prevent division by zero
-        if avg_price == 0:
-            return "UNDEFINED"
-        
-        range_percentage = (price_range / avg_price) * 100
-        
-        # Calculate standard deviation
-        price_std = data['Close'].std()
-        
-        # Coefficient of variation to assess trend
-        cv = (price_std / avg_price) * 100
-        
-        # Trend classification logic
-        if cv < 0.5:  # Very low variation
-            return "RANGING"
-        elif data['Close'].iloc[-1] > data['Close'].iloc[0] and price_range > 0:
-            return "BULLISH TREND"
-        elif data['Close'].iloc[-1] < data['Close'].iloc[0] and price_range > 0:
-            return "BEARISH TREND"
-        else:
-            return "RANGING"
+        except Exception as e:
+            return f"TREND ANALYSIS ERROR: {str(e)}"
 
     def generate_technical_chart(self, data, symbol):
         """
@@ -155,14 +162,17 @@ class MarketAnalysis:
         returns = close_prices.pct_change()
         
         # Compute metrics
-        analysis = {
-            'symbol': symbol,
-            'current_price': float(close_prices.iloc[-1]) if not close_prices.empty else np.nan,
-            'daily_change': float(returns.iloc[-1] * 100) if not returns.empty else np.nan,
-            'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
-            'market_trend': self.identify_market_trend(data),
-            'technical_chart': self.generate_technical_chart(data, symbol)
-        }
+        try:
+            analysis = {
+                'symbol': symbol,
+                'current_price': float(close_prices.iloc[-1].item()),
+                'daily_change': float(returns.iloc[-1].item() * 100),
+                'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+                'market_trend': self.identify_market_trend(data),
+                'technical_chart': self.generate_technical_chart(data, symbol)
+            }
+        except Exception as e:
+            return {'error': f'Analysis error: {str(e)}'}
         
         return analysis
 
