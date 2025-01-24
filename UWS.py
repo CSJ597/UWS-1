@@ -439,6 +439,14 @@ MARKET ANALYSIS: {current_date}
             # Determine momentum emoji
             momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
             
+            # Format news events
+            news_section = ""
+            if analysis.get('news_events'):
+                news_section = "\n📰 UPCOMING NEWS\n"
+                for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
+                    impact_emoji = "🔴" if event['impact'] == "High" else "🟠"
+                    news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
+            
             report += f"""
 💵 PRICE ACTION
 • Current: **${analysis['current_price']:.2f}** ({range_position})
@@ -449,7 +457,7 @@ MARKET ANALYSIS: {current_date}
 📊 MARKET CONDITIONS
 • Trend: {trend_emoji} {analysis['market_trend']}
 • Volatility: {volatility_status}
-• Momentum: {momentum_emoji} {abs(analysis['daily_change']):.1f}%
+• Momentum: {momentum_emoji} {abs(analysis['daily_change']):.1f}%{news_section}
 
 📝 ANALYSIS
 • AI Analysis: {analysis['ai_analysis']}
