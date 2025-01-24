@@ -61,24 +61,31 @@ class MarketAnalysis:
         Returns:
             str: Market trend classification
         """
+        if len(data) < 2:
+            return "INSUFFICIENT DATA"
+        
         # Calculate price range and standard deviation
-        price_range = data['High'].max() - data['Low'].min()
-        avg_price = data['Close'].mean()
+        price_range = float(data['High'].max() - data['Low'].min())
+        avg_price = float(data['Close'].mean())
+        
+        # Prevent division by zero
+        if avg_price == 0:
+            return "UNDEFINED"
+        
         range_percentage = (price_range / avg_price) * 100
         
-        # Use standard deviation of prices to detect ranging
-        price_std = data['Close'].std()
-        price_mean = data['Close'].mean()
+        # Calculate standard deviation and mean
+        price_std = float(data['Close'].std())
         
         # Coefficient of variation to assess trend
-        cv = (price_std / price_mean) * 100
+        cv = (price_std / avg_price) * 100
         
         # Trend classification logic
         if cv < 0.5:  # Very low variation
             return "RANGING"
-        elif data['Close'].iloc[-1] > data['Close'].iloc[0] and price_range > 0:
+        elif float(data['Close'].iloc[-1]) > float(data['Close'].iloc[0]) and price_range > 0:
             return "BULLISH TREND"
-        elif data['Close'].iloc[-1] < data['Close'].iloc[0] and price_range > 0:
+        elif float(data['Close'].iloc[-1]) < float(data['Close'].iloc[0]) and price_range > 0:
             return "BEARISH TREND"
         else:
             return "RANGING"
@@ -145,18 +152,11 @@ class MarketAnalysis:
         close_prices = data['Close']
         returns = close_prices.pct_change()
         
-        # Safely convert to scalar values
-        def safe_scalar(series):
-            try:
-                return float(series.iloc[-1]) if not series.empty else np.nan
-            except Exception:
-                return np.nan
-        
         # Compute metrics
         analysis = {
             'symbol': symbol,
-            'current_price': safe_scalar(close_prices),
-            'daily_change': safe_scalar(returns) * 100,
+            'current_price': float(close_prices.iloc[-1]) if not close_prices.empty else np.nan,
+            'daily_change': float(returns.iloc[-1]) * 100 if not returns.empty else np.nan,
             'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
             'market_trend': self.identify_market_trend(data),
             'technical_chart': self.generate_technical_chart(data, symbol)
