@@ -218,16 +218,15 @@ class MarketAnalysis:
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
         
-        # Make API request for AI analysis
+        # Prepare the payload for the AIML API request
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
         current_price = analysis['current_price']
         daily_change = analysis['daily_change']
         volatility = analysis['volatility']
         market_trend = analysis['market_trend']
-        results = f"Analyze the market trend and provide insights based on the following data: Current Price: {current_price}, Daily Change: {daily_change}, Volatility: {volatility}, Market Trend: {market_trend}."
         payload = {
             "inputs": {
-                "text": results
+                "text": f"Analyze the market trend and provide insights based on the following data: Current Price: {current_price}, Daily Change: {daily_change}, Volatility: {volatility}, Market Trend: {market_trend}."
             },
             "parameters": {
                 "model": "mistralai/Mistral-7B-Instruct-v0.2",
@@ -242,10 +241,15 @@ class MarketAnalysis:
         analysis_response = requests.post('https://api.aimlapi.com/v1', json=payload, headers=headers)
         logging.info(f"API Response Status Code: {analysis_response.status_code}")
         logging.info(f"API Response: {analysis_response.text}")
+
+        # Handle the API response
         if analysis_response.status_code == 200:
-            ai_analysis = analysis_response.json().get('analysis', 'No analysis available')
+            result = analysis_response.json()
+            ai_analysis = result.get('generated_text', 'No analysis available')
         else:
             ai_analysis = 'Failed to retrieve analysis'
+
+        # Store the AI analysis result in the analysis dictionary
         analysis['ai_analysis'] = ai_analysis
         
         return analysis
