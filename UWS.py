@@ -177,9 +177,9 @@ class MarketAnalysis:
         window = min(10, len(close_prices))  # 10-period Bollinger Bands for faster responsiveness.
 
         # Trend Analysis
-        first_close = close_prices.iloc[0]
-        last_close = close_prices.iloc[-1]
-        price_range = last_data['High'].max() - last_data['Low'].min()
+        first_close = float(close_prices.iloc[0])
+        last_close = float(close_prices.iloc[-1])
+        price_range = float(last_data['High'].max() - last_data['Low'].min())
         cv = float((np.std(close_prices) / np.mean(close_prices)) * 100)  # Ensure cv is a scalar
         if cv < 0.3:
             trend = "RANGING"
@@ -203,7 +203,7 @@ class MarketAnalysis:
         try:
             analysis = {
                 'symbol': 'ES',  # Display as ES instead of ES=F
-                'current_price': float(close_prices.iloc[-1].item()),
+                'current_price': float(close_prices.iloc[-1]),
                 'daily_change': float(returns.iloc[-1].item() * 100),
                 'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
                 'market_trend': self.identify_market_trend(data),
@@ -220,7 +220,7 @@ class MarketAnalysis:
         
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        analysis_response = requests.post('https://api.aimlapi.com/short_analysis', json={'data': analysis, 'model': 'DeepSeek LLM Chat (67B)'}, headers={'Authorization': f'Bearer {api_key}'})
+        analysis_response = requests.post('https://api.aimlapi.com/short_analysis', json={'data': analysis, 'model': 'DeepSeek LLM Chat (67B)', 'additional_info': 'Provide any necessary context here'}, headers={'Authorization': f'Bearer {api_key}'})
         logging.info(f"API Response Status Code: {analysis_response.status_code}")
         logging.info(f"API Response: {analysis_response.text}")
         if analysis_response.status_code == 200:
