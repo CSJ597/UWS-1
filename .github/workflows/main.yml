@@ -2,8 +2,8 @@ name: Daily Market Analysis
 
 on:
   schedule:
-    # Run at 9:30 AM EST (14:30 UTC)
-    - cron: '30 14 * * 1-5'  # Monday to Friday
+    # Run every minute between 9:25 AM and 9:35 AM EST (14:25-14:35 UTC) on weekdays
+    - cron: '*/1 14 * * 1-5'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -28,4 +28,10 @@ jobs:
       env:
         DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
       run: |
-        python market_analysis.py --discord
+        # For scheduled runs, use auto mode
+        if [ "${{ github.event_name }}" = "schedule" ]; then
+          python UWS.py --auto
+        else
+          # For manual runs, just send to Discord
+          python UWS.py --discord
+        fi
