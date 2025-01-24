@@ -542,21 +542,33 @@ if __name__ == "__main__":
                 if now.hour == 17 and now.minute == 6:
                     logging.info(f"Starting market analysis at {now}")
                     
-                    # Run analysis
-                    analysis_results = market.analyze_market()
-                    
-                    # Generate report
-                    report, chart = market.generate_market_report([analysis_results])
-                    
-                    # Send to Discord
-                    market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+                    try:
+                        # Run analysis
+                        logging.info("Running market analysis...")
+                        analysis_results = market.analyze_market()
+                        
+                        # Generate report
+                        logging.info("Generating report...")
+                        report, chart = market.generate_market_report([analysis_results])
+                        
+                        # Send to Discord
+                        logging.info("Sending to Discord...")
+                        market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+                        
+                        logging.info("Analysis complete, waiting for next run")
+                    except Exception as inner_e:
+                        logging.error(f"Error during analysis: {str(inner_e)}")
+                        raise
                     
                     # Sleep for 60 seconds to avoid running multiple times in the same minute
                     time.sleep(60)
                 else:
-                    # Sleep for 30 seconds before checking again
-                    time.sleep(30)
+                    # Log current time every 5 minutes
+                    if now.minute % 5 == 0 and now.second == 0:
+                        logging.info(f"Waiting for 5:06 PM... Current time: {now.strftime('%I:%M:%S %p')}")
+                    time.sleep(1)
             else:
+                logging.info(f"Weekend detected ({now.strftime('%A')}), sleeping for 1 hour")
                 # On weekends, sleep for 1 hour before checking again
                 time.sleep(3600)
                 
