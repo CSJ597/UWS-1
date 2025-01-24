@@ -252,6 +252,8 @@ def generate_market_report(analyses):
     report = f"""
 📈 UWS Market Update 📉
 {'─' * 15}
+📅 {current_date}
+📊 E-Mini S&P 500 Mar 25
 
 """
     chart = None
