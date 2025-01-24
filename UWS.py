@@ -218,14 +218,13 @@ class MarketAnalysis:
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
         
-        # Prepare market data for analysis with shorter format
+        # Prepare market data for analysis with focused format
         market_data = (
-            f"Price: ${analysis['current_price']:.2f}, "
-            f"Change: {analysis['daily_change']:.1f}%, "
-            f"Vol: {analysis['volatility']:.1f}%, "
-            f"Trend: {analysis['market_trend']}, "
-            f"H: ${analysis['session_high']:.2f}, "
-            f"L: ${analysis['session_low']:.2f}"
+            f"ES Price: ${analysis['current_price']:.2f} | "
+            f"24h Change: {analysis['daily_change']:.1f}% | "
+            f"Volatility: {analysis['volatility']:.1f}% | "
+            f"Trend: {analysis['market_trend']} | "
+            f"Range: ${analysis['session_low']:.2f}-${analysis['session_high']:.2f}"
         )
         
         # Prepare the API request
@@ -238,8 +237,8 @@ class MarketAnalysis:
         payload = {
             "model": "deepseek-ai/deepseek-llm-67b-chat",
             "messages": [
-                {"role": "system", "content": "You are a market analyst. Provide brief insights about the market data."},
-                {"role": "user", "content": f"Analyze: {market_data}"}
+                {"role": "system", "content": "You are a market analyst. Provide a concise analysis in three parts: 1) Current Market Summary 2) Technical Analysis 3) Short-term Forecast. Be direct and specific."},
+                {"role": "user", "content": f"Analyze this market data and provide actionable insights: {market_data}"}
             ],
             "temperature": 0.7,
             "max_tokens": 256
