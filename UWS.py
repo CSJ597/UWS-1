@@ -18,7 +18,7 @@ class MarketAnalysis:
     def __init__(self):
         """Initialize analysis with default configurations"""
         self.analysis_config = {
-            'period': '7h',  # Last 7 hours for most recent session focus.
+            'period': '1d',  # Change back to 1 day for valid data fetching.
             'interval': '1m',  # 1-minute granularity for scalping.
         }
         self.allowed_symbols = ['ES=F']
