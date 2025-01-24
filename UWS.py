@@ -355,8 +355,8 @@ class MarketAnalysis:
                         {
                             "role": "system",
                             "content": (
-                                "Analyze ES price action and structure. Include insights from recent news: {news_snippet}. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. No indicators."
-                            ).format(news_snippet=news_snippet)
+                                "You are a market analyst. Analyze ES price action and structure based on: {news_snippet}. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. Be direct and concise."
+                            ).format(news_snippet=news_snippet if news_snippet else "No recent headlines")
                         },
                         {"role": "user", "content": market_data}
                     ],
@@ -383,7 +383,8 @@ class MarketAnalysis:
                     
                     # Add range analysis
                     price_in_range = ((analysis['current_price'] - analysis['session_low']) / 
-                                    (analysis['session_high'] - analysis['session_low'])) * 100
+                                    (analysis['session_high'] - analysis['session_low'])) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+                    
                     if price_in_range > 75:
                         ai_analysis += "Price trading near session highs, showing bullish control."
                     elif price_in_range < 25:
@@ -497,20 +498,24 @@ class MarketAnalysis:
                     for news in analysis['market_news'][:3]:
                         news_section += f"• {news['title']} ({news['time']})\n"
                 
-                report += f"""PRICE ACTION
+                report += f"""
+📊 PRICE ACTION
 • Current: ${analysis['current_price']:.2f} ({range_position})
 • Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
 {prev_close_info}
 • Daily Change: {analysis['daily_change']:.2f}%
 
-MARKET CONDITIONS
+📈 MARKET CONDITIONS
 • Trend: {analysis['market_trend']}
 • Volatility: {volatility_status}
-• Momentum: {abs(analysis['daily_change']):.1f}%{news_section}
+• Momentum: {abs(analysis['daily_change']):.1f}%
 
-ANALYSIS
+{news_section}
+
+🔍 ANALYSIS
 {analysis['ai_analysis']}
-{'─' * 30}
+
+{'─' * 40}
 """
                 
                 # Add chart image if present
