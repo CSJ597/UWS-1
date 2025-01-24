@@ -9,7 +9,7 @@ on:
     #   * = any day of month
     #   * = any month
     #   * = any day of the week
-    - cron: '42 16 * * *'  # Runs at 11:42 AM EST (16:42 UTC)
+    - cron: '45 16 * * *'  # Runs at 11:42 AM EST (16:42 UTC)
 
 permissions:
   contents: read
