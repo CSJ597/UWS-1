@@ -1,8 +1,9 @@
-name: UWS Market Analysis - Auto
+name: UWS Market Analysis - Continuous Run
 
 on:
+  workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: '11 17 * * *'  # Scheduled run: 3:20 PM UTC (10:20 AM EST)
+    - cron: '17 17 * * 1-5'  # Scheduled run: 3:00 PM UTC (10:00 AM EST) on weekdays
 
 permissions:
   contents: read
@@ -11,16 +12,13 @@ permissions:
 jobs:
   market-analysis:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.run_id }}
-      cancel-in-progress: false  # Allow multiple runs
+    timeout-minutes: 0  # No timeout
 
     steps:
       - name: Debug Info
         run: |
           echo "Event name: ${{ github.event_name }}"
-          echo "Run type: auto"
+          echo "Run type: manual"
           echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
           echo "Timezone info: $(date +%Z) $(date +%z)"
 
@@ -37,10 +35,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install yfinance numpy pandas matplotlib seaborn requests
 
-      - name: Run market analysis
-        env:
-          DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+      - name: Run market analysis continuously
         run: |
-          echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-          python UWS.py --auto
-          echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+          while true; do
+            echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+            python UWS.py --auto
+            echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+            echo "Waiting for the next run..."
+            sleep 3600  # Sleep for 1 hour (3600 seconds)
+          done
