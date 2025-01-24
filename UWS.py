@@ -538,8 +538,8 @@ if __name__ == "__main__":
             
             # Check if it's a weekday (Monday = 0, Sunday = 6)
             if now.weekday() < 5:  # Monday to Friday
-                # Check if it's 6:00 PM
-                if now.hour == 17 and now.minute == 03:
+                # Check if it's 5:06 PM
+                if now.hour == 17 and now.minute == 6:
                     logging.info(f"Starting market analysis at {now}")
                     
                     # Run analysis
