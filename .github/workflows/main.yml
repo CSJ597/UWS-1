@@ -3,17 +3,17 @@ name: UWS Market Analysis
 on:
   schedule:
     # To change the time:
-    # '55 14 * * 1-5' means:
-    #   55 = minute (0-59)
-    #   14 = hour in UTC (14 UTC = 9 AM EST)
+    # '04 15 * * 1-5' means:
+    #   04 = minute (0-59)
+    #   15 = hour in UTC (15 UTC = 10 AM EST)
     #   * = any day of month
     #   * = any month
     #   1-5 = Monday to Friday
-    - cron: '04 15 * * 1-5'  # Currently set to 9:55 AM EST (14:55 UTC)
+    - cron: '04 15 * * 1-5'  # Runs at 10:04 AM EST (15:04 UTC)
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Run type (scheduled auto run at 9:55 AM EST will still occur)'
+        description: 'Run type (scheduled run at 10:04 AM EST will still occur)'
         required: true
         default: 'auto'
         type: choice
@@ -37,6 +37,7 @@ jobs:
         echo "Event name: ${{ github.event_name }}"
         echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         echo "Timezone info: $(date +%Z) $(date +%z)"
+        echo "Next scheduled run: 10:04 AM EST"
     
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -70,18 +71,18 @@ jobs:
           echo "Running auto analysis..."
           python UWS.py --auto
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Note: Scheduled auto run will still occur at 9:55 AM EST"
+            echo "Note: Daily scheduled run will still occur at 10:04 AM EST"
           fi
         elif [ "${{ github.event.inputs.run_type }}" = "print" ]; then
           # Manual run - print to console
           echo "Running manual analysis (print to console)..."
           python UWS.py --print
-          echo "Note: Scheduled auto run will still occur at 9:55 AM EST"
+          echo "Note: Daily scheduled run will still occur at 10:04 AM EST"
         else
           # Manual run - send to Discord
           echo "Running manual analysis (send to Discord)..."
           python UWS.py --discord
-          echo "Note: Scheduled auto run will still occur at 9:55 AM EST"
+          echo "Note: Daily scheduled run will still occur at 10:04 AM EST"
         fi
         
         echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
