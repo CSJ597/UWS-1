@@ -253,11 +253,12 @@ class MarketAnalysis:
                 json=payload
             )
             logging.info(f"API Response Status Code: {response.status_code}")
-            logging.info(f"API Response: {response.text}")
             
-            if response.status_code == 200:
+            # Handle successful responses (both 200 and 201)
+            if response.status_code in [200, 201]:
                 result = response.json()
-                ai_analysis = result.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis available')
+                ai_analysis = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+                logging.info(f"Analysis received: {ai_analysis[:10000]}...")  # Log first 100 chars
             else:
                 ai_analysis = 'Failed to retrieve analysis'
                 logging.error(f"API Error: {response.text}")
