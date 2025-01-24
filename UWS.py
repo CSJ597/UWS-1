@@ -2,15 +2,16 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import pytz
+from matplotlib.finance import candlestick_ohlc
 import seaborn as sns
 import requests
+import io
 from io import BytesIO
 import base64
 import datetime
 import logging
 import mplfinance as mpf
+from mplfinance.original_flavor import candlestick_ohlc
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -142,7 +143,8 @@ class MarketAnalysis:
             ])
         
         # Create candlestick chart
-        mpf.candlestick_ohlc(ax, candlestick_data, width=0.6,
+        from mplfinance.original_flavor import candlestick_ohlc
+        candlestick_ohlc(ax, candlestick_data, width=0.6,
                         colorup='#26a69a', colordown='#ef5350')
         
         # Convert index to readable times
