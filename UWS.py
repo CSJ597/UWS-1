@@ -1,17 +1,22 @@
-import requests
+import yfinance as yf
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
 class ScalpingAnalysis:
-    def __init__(self):
-        # API keys (if using additional APIs, can be added here later)
-        self.finnhub_api_key = "your_finnhub_api_key_here"
+    def get_yahoo_data(self, symbol='ES=F', period='1d', interval='5m'):
+        """
+        Fetch detailed market data from Yahoo Finance
         
-    def get_yahoo_data(self):
-        """Fetch data from Yahoo Finance"""
+        Args:
+            symbol (str): Stock/futures symbol to analyze
+            period (str): Time period for data retrieval
+            interval (str): Candle interval
+        
+        Returns:
+            pandas.DataFrame: Detailed market data
+        """
         try:
-            data = yf.download('ES=F', period='1d', interval='5m')
+            data = yf.download(symbol, period=period, interval=interval)
             return data
         except Exception as e:
             print(f"Yahoo Finance Data Fetch Error: {e}")
@@ -46,32 +51,10 @@ class ScalpingAnalysis:
         
         return rsi.iloc[-1] if not rsi.empty else np.nan
 
-    def get_market_sentiment(self):
-        """Fetch market sentiment and news from Finnhub"""
-        try:
-            news_url = f"https://finnhub.io/api/v1/news?category=general&token={self.finnhub_api_key}"
-            news_response = requests.get(news_url)
-            news_data = news_response.json()
-            
-            # Safely extract top 3 news items
-            news_data = news_data[:3] if isinstance(news_data, list) else []
-            
-            return {
-                "news": [
-                    {
-                        "headline": news.get("headline", "No Headline"),
-                        "summary": news.get("summary", "No Summary")
-                    } for news in news_data
-                ]
-            }
-        except Exception as e:
-            print(f"Market Sentiment Error: {e}")
-            return {"error": str(e)}
-
-    def advanced_scalping_analysis(self):
+    def advanced_scalping_analysis(self, symbol='ES=F'):
         """Comprehensive scalping preparation analysis"""
         # Fetch data from Yahoo Finance
-        data = self.get_yahoo_data()
+        data = self.get_yahoo_data(symbol)
         
         if data.empty:
             return "Unable to fetch market data"
@@ -90,14 +73,10 @@ class ScalpingAnalysis:
         macd = self._custom_macd(close_prices)
         rsi = self._custom_rsi(close_prices)
         
-        # Market sentiment
-        sentiment = self.get_market_sentiment()
-        
         # Compile comprehensive analysis
         analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
 
-💰 MARKET DATA SOURCES:
-- Yahoo Finance: {'✅ Loaded' if not data.empty else '❌ Failed'}
+🔍 SYMBOL: {symbol}
 
 📊 MARKET STRUCTURE:
 - Current Price: ${close_prices.iloc[-1]:,.2f}
@@ -111,9 +90,6 @@ class ScalpingAnalysis:
 - MACD Signal: {macd['signal_line']:,.4f}
 - MACD Histogram: {macd['histogram']:,.4f}
 - RSI: {rsi:,.2f}
-
-🌐 MARKET SENTIMENT:
-{chr(10).join(f'• {news["headline"]}' for news in sentiment.get('news', [])[:2])}
 
 💡 SCALPING INSIGHTS:
 {self._generate_scalping_insights(macd, rsi, volatility)}
@@ -146,17 +122,22 @@ class ScalpingAnalysis:
         
         return chr(10).join(insights)
 
-def send_discord_message(message):
-    webhook_url = "your_discord_webhook_url_here"
-    max_length = 2000
-    for i in range(0, len(message), max_length):
-        chunk = message[i:i+max_length]
-        requests.post(webhook_url, json={"content": chunk})
-
 def main():
+    # Example usage for E-mini S&P 500 Futures
     scalping_analysis = ScalpingAnalysis()
-    analysis = scalping_analysis.advanced_scalping_analysis()
-    send_discord_message(analysis)
+    
+    # Example symbols you might want to analyze
+    symbols = ['ES=F', 'NQ=F', '^GSPC']
+    
+    for symbol in symbols:
+        try:
+            print(f"\n{'='*50}")
+            print(f"Analysis for {symbol}")
+            print(f"{'='*50}")
+            analysis = scalping_analysis.advanced_scalping_analysis(symbol)
+            print(analysis)
+        except Exception as e:
+            print(f"Error analyzing {symbol}: {e}")
 
 if __name__ == "__main__":
     main()
