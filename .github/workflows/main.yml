@@ -3,7 +3,7 @@ name: UWS Market Analysis
 on:
   schedule:
     # Run at 9:05 AM EST (14:05 UTC) on weekdays
-    - cron: '5 14 * * 1-5'
+    - cron: '9 14 * * 1-5'
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
@@ -14,6 +14,14 @@ on:
         options:
           - manual
           - test
+  push:
+    branches: [ main, master ]  # Trigger on push to main branches
+  pull_request:
+    branches: [ main, master ]  # Trigger on PRs to main branches
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   market-analysis:
@@ -41,12 +49,12 @@ jobs:
           # Scheduled run - use auto mode
           echo "Running scheduled analysis..."
           python UWS.py --auto
-        elif [ "${{ github.event.inputs.run_type }}" = "test" ]; then
+        elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.run_type }}" = "test" ]; then
           # Test run - print to console
           echo "Running test analysis..."
           python UWS.py --print
         else
-          # Manual run - send to Discord
+          # Manual run or push/PR - send to Discord
           echo "Running manual analysis..."
           python UWS.py --discord
         fi
