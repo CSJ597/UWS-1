@@ -18,7 +18,7 @@ import time
 logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-API_KEY = "32760184b7ce475e942fde2344d49a68"
+API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 class MarketAnalysis:
     def __init__(self):
@@ -375,7 +375,7 @@ class MarketAnalysis:
                 if response.status_code in [200, 201]:
                     ai_analysis = response.json()['choices'][0]['message']['content'].strip()
                 elif response.status_code == 429:
-                    ai_analysis = "🕒 Rate limit reached. Using price action analysis only:\n\n"
+                    ai_analysis = "Rate limit reached. Using price action analysis only:\n\n"
                     if analysis['daily_change'] > 0:
                         ai_analysis += f"ES showing strength, up {analysis['daily_change']:.1f}% from previous close. "
                     else:
@@ -394,11 +394,11 @@ class MarketAnalysis:
                     logging.warning("API rate limit reached")
                 else:
                     error_msg = response.json().get('message', 'Unknown error')
-                    ai_analysis = f"⚠️ Analysis Error: {error_msg}"
+                    ai_analysis = f"Analysis Error: {error_msg}"
                     logging.error(f"API Error: {response.text}")
                 
             except Exception as e:
-                ai_analysis = "⚠️ Analysis Error: Unable to connect to AI service"
+                ai_analysis = "Analysis Error: Unable to connect to AI service"
                 logging.error(f"Error getting AI analysis: {str(e)}")
             
             # Update analysis with AI response and format
@@ -460,7 +460,7 @@ MARKET ANALYSIS: {current_date}
         
         for analysis in analysis_results:
             if 'error' in analysis:
-                report += f"❌ Error: {analysis['error']}\n\n"
+                report += f"Error: {analysis['error']}\n\n"
                 continue
             
             # Trading Insights
@@ -470,50 +470,43 @@ MARKET ANALYSIS: {current_date}
             price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
             
             # Format price position description
-            range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
+            range_position = "NEAR HIGH" if price_position > 75 else "NEAR LOW" if price_position < 25 else "MID-RANGE"
             
             # Calculate change from previous close if available
             prev_close_info = ""
             if analysis['prev_close']:
                 change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-                arrow = "📈" if change_from_prev > 0 else "📉"
-                prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
-                
-            # Determine trend emoji
-            trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
-            
-            # Determine momentum emoji
-            momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
+                prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
             
             # Format news events
-            news_section = "\n📰 UPCOMING NEWS\n"
+            news_section = "\nUPCOMING NEWS\n"
             if analysis.get('news_events'):
                 for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
-                    impact_emoji = "🔴" if event['impact'] == "High" else "🟠"
+                    impact_emoji = "" if event['impact'] == "High" else ""
                     news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
             else:
-                news_section += "• 📆 No high-impact news events in next 30 minutes\n"
+                news_section += "• No high-impact news events in next 30 minutes\n"
             
             # Add recent market headlines
             if analysis.get('market_news'):
-                news_section += "\n📰 RECENT HEADLINES\n"
+                news_section += "\nRECENT HEADLINES\n"
                 for news in analysis['market_news'][:3]:  # Show top 3 headlines
-                    news_section += f"• 📄 {news['title']} ({news['time']})\n"
+                    news_section += f"• {news['title']} ({news['time']})\n"
             
             report += f"""
-💵 PRICE ACTION
-• Current: **${analysis['current_price']:.2f}** ({range_position})
-• Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
+PRICE ACTION
+• Current: ${analysis['current_price']:.2f} ({range_position})
+• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
 {prev_close_info}
-• Daily Change: {arrow} {analysis['daily_change']:.2f}%
+• Daily Change: {analysis['daily_change']:.2f}%
 
-📊 MARKET CONDITIONS
-• Trend: {trend_emoji} {analysis['market_trend']}
+MARKET CONDITIONS
+• Trend: {analysis['market_trend']}
 • Volatility: {volatility_status}
-• Momentum: {momentum_emoji} {abs(analysis['daily_change']):.1f}%{news_section}
+• Momentum: {abs(analysis['daily_change']):.1f}%{news_section}
 
-📝 ANALYSIS
-• AI Analysis: {analysis['ai_analysis']}
+ANALYSIS
+{analysis['ai_analysis']}
 {'─' * 15}
 """
             
