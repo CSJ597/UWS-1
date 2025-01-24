@@ -115,7 +115,7 @@ class MarketAnalysis:
         # Convert index to EST timezone
         est_index = data.index.tz_convert('US/Eastern')
 
-        # Plot with white line
+        # Plot with white line for the price
         plt.plot(est_index, close_prices, label='Close Price', color='white', linewidth=1.5)
         plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
         plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
@@ -126,11 +126,10 @@ class MarketAnalysis:
         plt.ylabel('Price')
         plt.legend()
         plt.grid(True, color='black')
-        plt.xticks(rotation=45)
 
         # Save plot to buffer with matching facecolor
         buffer = BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', facecolor="#a3c1ad")  # Ensure facecolor matches
+        plt.savefig(buffer, format='png', bbox_inches='tight', facecolor="#a3c1ad", transparent=True)  # Ensure facecolor matches
         plt.close()
 
         # Encode image to base64
