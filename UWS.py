@@ -70,15 +70,14 @@ class MarketAnalysis:
             # Calculate price range and standard deviation
             price_range = float(data['High'].max() - data['Low'].min())
             
-            # Use .item() to convert Series to scalar
-            avg_price = float(data['Close'].mean().item())
+            avg_price = float(data['Close'].mean())
             
             # Prevent division by zero
             if avg_price == 0:
                 return "UNDEFINED"
             
             # Calculate standard deviation
-            price_std = float(data['Close'].std().item())
+            price_std = float(data['Close'].std())
             
             # Coefficient of variation to assess trend
             cv = (price_std / avg_price) * 100
@@ -111,40 +110,34 @@ class MarketAnalysis:
             str: Base64 encoded chart image
         """
         plt.figure(figsize=(12, 8))
-        plt.style.use('seaborn-v0_8')
         
-        # Price and Bollinger Bands
+        # Set blue background for the chart
+        plt.style.use('dark_background')  # Use a dark style
+        plt.gca().set_facecolor('blue')  # Explicitly set the chart background to blue
+
+        # Price line in white
         close_prices = data['Close']
-        window = min(20, len(close_prices))  # Adjust window size if data is less
-        
-        middle_band = close_prices.rolling(window=window).mean()
-        std_dev = close_prices.rolling(window=window).std()
-        upper_band = middle_band + (std_dev * 2)
-        lower_band = middle_band - (std_dev * 2)
-        
-        # Convert index to EST timezone (data is already tz-aware)
         est_index = data.index.tz_convert('US/Eastern')
-        
-        plt.plot(est_index, close_prices, label='Close Price', color='blue')
-        plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
-        plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
-        plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
-        
-        plt.title('Underground Wall Street\n E-Mini S&P 500 TA', pad=20)
-        plt.xlabel('Time (EST)')
-        plt.ylabel('Price')
-        plt.legend()
-        plt.grid(True)
-        plt.xticks(rotation=45)
+
+        plt.plot(est_index, close_prices, label='Close Price', color='white', linewidth=2)
+
+        # Adjust grid and titles
+        plt.title('Market Analysis - E-Mini S&P 500', pad=20, color='white')
+        plt.xlabel('Time (EST)', color='white')
+        plt.ylabel('Price', color='white')
+        plt.legend(facecolor='blue', edgecolor='white')
+        plt.grid(color='white', linestyle='--', linewidth=0.5)
+        plt.xticks(rotation=45, color='white')
+        plt.yticks(color='white')
         
         # Format x-axis to show EST times
         plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%I:%M %p', tz=est_index.tz))
-        
+
         plt.tight_layout()
         
         # Save plot to buffer
         buffer = BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight')
+        plt.savefig(buffer, format='png', bbox_inches='tight', facecolor='blue')
         plt.close()
         
         # Encode image to base64
@@ -165,65 +158,21 @@ class MarketAnalysis:
         if data_error:
             return {'error': data_error}
         
-        # Get additional market info from Yahoo Finance
-        try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            
-            # Get previous day's close for reference
-            prev_day = ticker.history(period='2d', interval='1d')
-            prev_close = float(prev_day['Close'].iloc[0]) if len(prev_day) > 1 else None
-        except Exception as e:
-            info = {}
-            prev_close = None
-            print(f"Warning: Could not fetch additional market data: {e}")
-        
         # Analyze the last 3 hours (180 minutes)
         last_data = data.tail(180)
         close_prices = last_data['Close']
         returns = close_prices.pct_change()
 
-        # Bollinger Bands
-        window = min(10, len(close_prices))  # 10-period Bollinger Bands for faster responsiveness.
-
-        # Trend Analysis
-        first_close = close_prices.iloc[0]
-        last_close = close_prices.iloc[-1]
-        price_range = last_data['High'].max() - last_data['Low'].min()
-        cv = float((np.std(close_prices) / np.mean(close_prices)) * 100)  # Ensure cv is a scalar
-        if cv < 0.3:
-            trend = "RANGING"
-        elif last_close > first_close and price_range > 0:
-            trend = "BULLISH TREND"
-        elif last_close < first_close and price_range > 0:
-            trend = "BEARISH TREND"
-        else:
-            trend = "RANGING"
-
-        # Volatility
-        recent_returns = returns.tail(30)  # Use last 30 minutes for scalping volatility.
-        volatility = float(np.std(recent_returns.dropna()) * np.sqrt(252) * 100)
-
-        # Volume Sensitivity
-        recent_volume = data['Volume'].tail(10).mean()
-        avg_volume = data['Volume'].mean()
-        volume_spike = recent_volume > (1.5 * avg_volume)
-
-        # Compute metrics
         try:
             analysis = {
                 'symbol': 'ES',  # Display as ES instead of ES=F
-                'current_price': float(close_prices.iloc[-1].item()),
-                'daily_change': float(returns.iloc[-1].item() * 100),
+                'current_price': float(close_prices.iloc[-1]),
+                'daily_change': float(returns.iloc[-1] * 100),
                 'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
                 'market_trend': self.identify_market_trend(data),
                 'technical_chart': self.generate_technical_chart(data, 'ES'),
                 'session_high': float(last_data['High'].max()),
-                'session_low': float(last_data['Low'].min()),
-                'prev_close': prev_close,
-                'volume': int(data['Volume'].sum()) if 'Volume' in data else None,
-                'avg_volume': info.get('averageVolume', None),
-                'description': info.get('shortName', 'E-mini S&P 500 Futures')
+                'session_low': float(last_data['Low'].min())
             }
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
@@ -261,82 +210,6 @@ def send_discord_message(webhook_url, message, chart_base64=None):
         except Exception as e:
             print(f"Error sending message to Discord: {e}")
 
-def generate_market_report(analyses):
-    """
-    Generate a comprehensive market report
-    
-    Args:
-        analyses (list): List of market analyses
-    
-    Returns:
-        tuple: Formatted market report and chart (if available)
-    """
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    report = f"""
-📈 UWS Market Update 📉
-📅 {current_date}
-📊 E-Mini S&P 500 Mar 25
-{'─' * 15}
-"""
-    chart = None
-    
-    for analysis in analyses:
-        if 'error' in analysis:
-            report += f"❌ Error: {analysis['error']}\n\n"
-            continue
-        
-        # Trading Insights
-        volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
-        
-        # Calculate price position relative to day's range
-        price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
-        
-        # Format price position description
-        range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
-        
-        # Calculate change from previous close if available
-        prev_close_info = ""
-        if analysis['prev_close']:
-            change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-            arrow = "📈" if change_from_prev > 0 else "📉"
-            prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
-            
-        # Determine trend emoji
-        trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
-        
-        # Determine momentum emoji
-        momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
-        
-        report += f"""
-💵 PRICE ACTION
-• Current: **${analysis['current_price']:.2f}** ({range_position})
-• Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
-• Today's Move: **{analysis['daily_change']:+.2f}%** 
-{prev_close_info}
-📊 TECHNICAL SNAPSHOT
-• Market Trend: {trend_emoji} **{analysis['market_trend']}**
-• Volatility: 🌪️ **{analysis['volatility']:.2f}%** ({volatility_status})
-• Range Position: 📍 **{price_position:.1f}%**
-
-🎯 TRADING SIGNALS
-• Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
-• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Low'}
-"""
-        
-        if analysis['volume'] and analysis['avg_volume']:
-            volume_ratio = (analysis['volume'] / analysis['avg_volume']) * 100
-            volume_emoji = "🔥" if volume_ratio > 100 else "💤"
-            report += f"• Volume: {volume_emoji} {volume_ratio:.1f}% of average\n"
-            
-        report += f"\n{'═' * 40}\n"
-        
-        # Use the first available chart
-        if not chart:
-            chart = analysis['technical_chart']
-    
-    report += "\n🔍 Summary: Review key metrics for trading decisions."
-    return report, chart
-
 def main():
     # Initialize market analysis
     market_analyzer = MarketAnalysis()
@@ -347,11 +220,13 @@ def main():
     # Perform analyses
     analyses = [market_analyzer.analyze_market(symbol) for symbol in symbols]
     
-    # Generate report with chart
-    report, chart = generate_market_report(analyses)
-    
-    # Send to Discord
-    send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+    # Generate report
+    for analysis in analyses:
+        if 'error' in analysis:
+            print(f"Error: {analysis['error']}")
+        else:
+            print(f"Market Report: {analysis}")
+            send_discord_message(DISCORD_WEBHOOK_URL, "Market Analysis Report", analysis['technical_chart'])
 
 if __name__ == "__main__":
     main()
