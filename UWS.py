@@ -22,35 +22,40 @@ class ScalpingAnalysis:
         except Exception as e:
             print(f"Yahoo Finance Data Fetch Error: {e}")
             return pd.DataFrame()
+    
+    def _calculate_bollinger_bands(self, prices, window=20, num_std=2):
+        """Calculate Bollinger Bands using Yahoo Finance style"""
+        middle_band = prices.rolling(window=window).mean()
+        std_dev = prices.rolling(window=window).std()
+        upper_band = middle_band + (std_dev * num_std)
+        lower_band = middle_band - (std_dev * num_std)
         
-    def _custom_macd(self, prices, fast_period=12, slow_period=26, signal_period=9):
-        """Custom MACD calculation"""
-        exp1 = prices.ewm(span=fast_period, adjust=False).mean()
-        exp2 = prices.ewm(span=slow_period, adjust=False).mean()
-        
-        macd_line = exp1 - exp2
-        signal_line = macd_line.ewm(span=signal_period, adjust=False).mean()
-        histogram = macd_line - signal_line
-        
+        # Return latest values
         return {
-            'macd_line': float(macd_line.iloc[0]) if len(macd_line) > 0 else np.nan,
-            'signal_line': float(signal_line.iloc[0]) if len(signal_line) > 0 else np.nan,
-            'histogram': float(histogram.iloc[0]) if len(histogram) > 0 else np.nan
+            'middle_band': float(middle_band.iloc[-1]) if not middle_band.empty else np.nan,
+            'upper_band': float(upper_band.iloc[-1]) if not upper_band.empty else np.nan,
+            'lower_band': float(lower_band.iloc[-1]) if not lower_band.empty else np.nan
         }
 
-    def _custom_rsi(self, prices, periods=14):
-        """Custom RSI calculation"""
-        delta = prices.diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
+    def _calculate_stochastic_oscillator(self, data, periods=14):
+        """Calculate Stochastic Oscillator"""
+        high = data['High']
+        low = data['Low']
+        close = data['Close']
         
-        avg_gain = gain.rolling(window=periods).mean()
-        avg_loss = loss.rolling(window=periods).mean()
+        lowest_low = low.rolling(window=periods).min()
+        highest_high = high.rolling(window=periods).max()
         
-        rs = avg_gain / avg_loss
-        rsi = 100.0 - (100.0 / (1.0 + rs))
+        # %K line (Stochastic)
+        k_line = ((close - lowest_low) / (highest_high - lowest_low)) * 100
         
-        return float(rsi.iloc[0]) if not rsi.empty else np.nan
+        # %D line (Signal line)
+        d_line = k_line.rolling(window=3).mean()
+        
+        return {
+            'k_line': float(k_line.iloc[-1]) if not k_line.empty else np.nan,
+            'd_line': float(d_line.iloc[-1]) if not d_line.empty else np.nan
+        }
 
     def advanced_scalping_analysis(self, symbol='ES=F'):
         """Comprehensive scalping preparation analysis"""
@@ -72,8 +77,8 @@ class ScalpingAnalysis:
         current_daily_change = float(returns.iloc[-1] * 100)
         
         # Technical indicators
-        macd = self._custom_macd(close_prices)
-        rsi = self._custom_rsi(close_prices)
+        bollinger = self._calculate_bollinger_bands(close_prices)
+        stochastic = self._calculate_stochastic_oscillator(data)
         
         # Compile comprehensive analysis
         analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
@@ -88,39 +93,40 @@ class ScalpingAnalysis:
 - Daily Price Change: {current_daily_change:.2f}%
 
 🚀 TECHNICAL INDICATORS:
-- MACD Line: {macd['macd_line']:.4f}
-- MACD Signal: {macd['signal_line']:.4f}
-- MACD Histogram: {macd['histogram']:.4f}
-- RSI: {rsi:.2f}
+- Bollinger Middle Band: ${bollinger['middle_band']:.2f}
+- Bollinger Upper Band: ${bollinger['upper_band']:.2f}
+- Bollinger Lower Band: ${bollinger['lower_band']:.2f}
+- Stochastic %K: {stochastic['k_line']:.2f}
+- Stochastic %D: {stochastic['d_line']:.2f}
 
 💡 SCALPING INSIGHTS:
-{self._generate_scalping_insights(macd, rsi, {
+{self._generate_scalping_insights(bollinger, stochastic, {
     'historical_volatility': historical_volatility, 
-    'current_daily_change': current_daily_change
+    'current_price': current_price
 })}
 """
         return analysis
 
-    def _generate_scalping_insights(self, macd, rsi, volatility):
+    def _generate_scalping_insights(self, bollinger, stochastic, context):
         """Generate scalping insights based on indicators"""
         insights = []
         
-        # MACD Trend Analysis
-        if macd['histogram'] > 0:
-            insights.append("🟢 Bullish Momentum: Consider long entries")
-        elif macd['histogram'] < 0:
-            insights.append("🔴 Bearish Momentum: Consider short entries")
+        # Bollinger Band Analysis
+        if context['current_price'] > bollinger['upper_band']:
+            insights.append("🔴 Price Above Upper Band: Potential Overextension")
+        elif context['current_price'] < bollinger['lower_band']:
+            insights.append("🟢 Price Below Lower Band: Potential Reversal")
         else:
-            insights.append("⚪ Neutral Momentum: Wait for clear signal")
+            insights.append("⚪ Price Within Bands: Neutral Trend")
         
-        # RSI Overbought/Oversold
-        if rsi > 70:
-            insights.append("⚠️ Potential Overbought: Risk of reversal")
-        elif rsi < 30:
-            insights.append("⚠️ Potential Oversold: Possible bounce")
+        # Stochastic Oscillator Analysis
+        if stochastic['k_line'] > 80:
+            insights.append("⚠️ Stochastic Overbought: Consider Short Entry")
+        elif stochastic['k_line'] < 20:
+            insights.append("⚠️ Stochastic Oversold: Consider Long Entry")
         
         # Volatility Recommendation
-        if volatility['historical_volatility'] > 2:
+        if context['historical_volatility'] > 2:
             insights.append("🔥 High Volatility: Tighter stop-losses recommended")
         else:
             insights.append("❄️ Low Volatility: Be cautious of false breakouts")
@@ -128,19 +134,13 @@ class ScalpingAnalysis:
         return chr(10).join(insights)
 
 def send_discord_message(webhook_url, message):
-    """
-    Send message to Discord webhook
-    
-    Args:
-        webhook_url (str): Discord webhook URL
-        message (str): Message to send
-    """
+    """Send message to Discord webhook"""
     max_length = 2000
     for i in range(0, len(message), max_length):
         chunk = message[i:i+max_length]
         try:
             response = requests.post(webhook_url, json={"content": chunk})
-            response.raise_for_status()  # Raise an exception for HTTP errors
+            response.raise_for_status()
         except Exception as e:
             print(f"Error sending Discord message: {e}")
 
@@ -151,8 +151,8 @@ def main():
     # Initialize scalping analysis
     scalping_analysis = ScalpingAnalysis()
     
-    # Example symbols to analyze
-    symbols = ['ES=F', 'NQ=F', '^GSPC']
+    # Analyze ES Futures and S&P 500
+    symbols = ['ES=F', '^GSPC']
     
     # Collect all analyses
     full_analysis = ""
