@@ -7,6 +7,10 @@ import requests
 from io import BytesIO
 import base64
 import datetime
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 
