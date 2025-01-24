@@ -349,27 +349,69 @@ class MarketAnalysis:
             logging.error(f"Market analysis error: {str(e)}")
             return {'error': str(e)}
 
-    def send_discord_message(self, webhook_url, message, chart_base64=None):
-        """Send a message to Discord with optional chart image"""
+    def send_discord_message(self, webhook_url, content, chart_data=None):
+        """Send message to Discord with better formatting and error handling"""
         try:
-            payload = {"content": message}
-            
-            if chart_base64:
-                # Create image file from base64
-                image_data = base64.b64decode(chart_base64)
-                files = {
-                    'file': ('chart.png', image_data, 'image/png')
-                }
-                response = requests.post(webhook_url, data=payload, files=files)
+            # Truncate content if too long
+            max_content_length = 1500  # Discord's limit is 2000, leaving room for formatting
+            if len(content) > max_content_length:
+                content = content[:max_content_length] + "..."
+
+            # Format the message
+            formatted_content = (
+                "```ansi\n"  # Use ansi for better formatting
+                "🟦 ES MARKET ANALYSIS\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{content}\n"
+                "```"
+            )
+
+            # Prepare the payload
+            payload = {"content": formatted_content}
+            files = {}
+
+            # Add chart if available
+            if chart_data:
+                try:
+                    # Decode base64 chart data
+                    chart_bytes = base64.b64decode(chart_data)
+                    files = {
+                        'chart.png': ('chart.png', chart_bytes, 'image/png')
+                    }
+                except Exception as e:
+                    logging.error(f"Error processing chart data: {e}")
+
+            # Send the message
+            response = requests.post(
+                webhook_url,
+                data=payload,
+                files=files,
+                timeout=10
+            )
+
+            # Check response
+            if response.status_code in [200, 204]:
+                logging.info("Discord message sent successfully")
             else:
-                response = requests.post(webhook_url, json=payload)
-            
-            response.raise_for_status()
-            logging.info("Discord message sent successfully")
-            
+                error_msg = f"Discord API error: {response.status_code} - {response.text}"
+                logging.error(error_msg)
+                # Retry with just text if file upload failed
+                if files and response.status_code == 400:
+                    logging.info("Retrying without chart...")
+                    response = requests.post(
+                        webhook_url,
+                        json={"content": formatted_content},
+                        timeout=10
+                    )
+                    if response.status_code in [200, 204]:
+                        logging.info("Discord message sent successfully (without chart)")
+                    else:
+                        logging.error(f"Retry failed: {response.status_code} - {response.text}")
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error sending Discord message: {e}")
         except Exception as e:
-            logging.error(f"Failed to send Discord message: {str(e)}")
-            raise
+            logging.error(f"Unexpected error sending Discord message: {e}")
 
 def generate_market_report(analyses):
     """
