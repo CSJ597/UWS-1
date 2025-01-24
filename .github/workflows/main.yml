@@ -2,8 +2,8 @@ name: Daily Market Analysis
 
 on:
   schedule:
-    # Run every minute between 9:25 AM and 9:35 AM EST (14:25-14:35 UTC) on weekdays
-    - cron: '*/1 14 * * 1-5'
+    # Run at 8:46 AM EST (13:46 UTC) on weekdays
+    - cron: '46 13 * * 1-5'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
