@@ -2,12 +2,19 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    - cron: '35 16 * * 1-5'  # Scheduled run: 10:20 AM EST (15:20 UTC)
+    # To change the time:
+    # '20 15 * * 1-5' means:
+    #   20 = minute (0-59)
+    #   15 = hour in UTC (15 UTC = 10 AM EST)
+    #   * = any day of month
+    #   * = any month
+    #   1-5 = Monday to Friday
+    - cron: '39 15 * * 1-5'  # Runs at 10:20 AM EST (15:20 UTC)
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Run type (scheduled run at 11:30 AM EST will still occur)'
-        required: false
+        description: 'Run type (daily scheduled run at 11:39 AM EST will always occur, regardless of manual runs)'
+        required: true
         default: 'auto'
         type: choice
         options:
@@ -20,69 +27,78 @@ permissions:
   actions: write
 
 jobs:
-  market-analysis:
+  # Separate job for scheduled runs
+  scheduled-run:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Separate concurrency for manual and scheduled runs
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.trigger_id || github.run_id }}
-      cancel-in-progress: false  # Prevent conflicts
-
     steps:
-      - name: Debug Info
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Run type: ${{ github.event.inputs.run_type || 'auto' }}"
-          echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-          echo "Timezone info: $(date +%Z) $(date +%z)"
-          echo "Next scheduled run is at 10:20 AM EST (15:20 UTC)"
-          echo "Scheduled event? $([[ "${{ github.event_name }}" == "schedule" ]] && echo 'Yes' || echo 'No')"
+    - name: Debug Info
+      run: |
+        echo "SCHEDULED RUN"
+        echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+    
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install yfinance numpy pandas matplotlib seaborn requests
+        
+    - name: Run scheduled analysis
+      env:
+        DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+      run: |
+        echo "Starting SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+        python UWS.py --auto
+        echo "Finished SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
 
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install yfinance numpy pandas matplotlib seaborn requests
-
-      - name: Run market analysis
-        env:
-          DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-        run: |
-          # Determine run type
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            run_type="auto"
-          else
-            run_type="${{ github.event.inputs.run_type || 'auto' }}"
-          fi
-
-          echo "Run type determined as: $run_type"
-
-          # Wait for exact second if needed
-          current_sec=$(date +%S)
-          if [ $current_sec -lt 58 ]; then
-            sleep_time=$((60 - $current_sec))
-            echo "Waiting $sleep_time seconds to start on the minute..."
-            sleep $sleep_time
-          fi
-
-          echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-
-          if [ "$run_type" = "auto" ]; then
-            echo "Running auto analysis..."
-            python UWS.py --auto
-          elif [ "$run_type" = "print" ]; then
-            echo "Running manual analysis (print to console)..."
-            python UWS.py --print
-          elif [ "$run_type" = "discord" ]; then
-            echo "Running manual analysis (send to Discord)..."
-            python UWS.py --discord
-          fi
-
-          echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+  # Separate job for manual runs
+  manual-run:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Debug Info
+      run: |
+        echo "MANUAL RUN"
+        echo "Run type: ${{ github.event.inputs.run_type }}"
+        echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+        echo "Note: Daily scheduled run will still occur at 10:20 AM EST, regardless of this manual run"
+    
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install yfinance numpy pandas matplotlib seaborn requests
+        
+    - name: Run manual analysis
+      env:
+        DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+      run: |
+        echo "Starting MANUAL market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+        if [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
+          echo "Running manual auto analysis..."
+          python UWS.py --auto
+        elif [ "${{ github.event.inputs.run_type }}" = "print" ]; then
+          echo "Running manual analysis (print to console)..."
+          python UWS.py --print
+        else
+          echo "Running manual analysis (send to Discord)..."
+          python UWS.py --discord
+        fi
+        echo "Finished MANUAL market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+        echo "Note: Daily scheduled run will still occur at 10:20 AM EST, regardless of this manual run"
