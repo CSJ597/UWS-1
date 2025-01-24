@@ -33,9 +33,9 @@ class ScalpingAnalysis:
         histogram = macd_line - signal_line
         
         return {
-            'macd_line': float(macd_line.iloc[-1]) if len(macd_line) > 0 else np.nan,
-            'signal_line': float(signal_line.iloc[-1]) if len(signal_line) > 0 else np.nan,
-            'histogram': float(histogram.iloc[-1]) if len(histogram) > 0 else np.nan
+            'macd_line': float(macd_line.iloc[0]) if len(macd_line) > 0 else np.nan,
+            'signal_line': float(signal_line.iloc[0]) if len(signal_line) > 0 else np.nan,
+            'histogram': float(histogram.iloc[0]) if len(histogram) > 0 else np.nan
         }
 
     def _custom_rsi(self, prices, periods=14):
@@ -50,7 +50,7 @@ class ScalpingAnalysis:
         rs = avg_gain / avg_loss
         rsi = 100.0 - (100.0 / (1.0 + rs))
         
-        return float(rsi.iloc[-1]) if not rsi.empty else np.nan
+        return float(rsi.iloc[0]) if not rsi.empty else np.nan
 
     def advanced_scalping_analysis(self, symbol='ES=F'):
         """Comprehensive scalping preparation analysis"""
@@ -66,13 +66,16 @@ class ScalpingAnalysis:
         # Volatility calculation
         returns = close_prices.pct_change()
         volatility = {
-            'historical_volatility': float(np.std(returns) * np.sqrt(252) * 100),
-            'current_daily_change': float(returns.iloc[-1] * 100)
+            'historical_volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+            'current_daily_change': float(returns.iloc[-1]) * 100
         }
         
         # Technical indicators
         macd = self._custom_macd(close_prices)
         rsi = self._custom_rsi(close_prices)
+        
+        # Ensure we have a valid current price and all metrics
+        current_price = close_prices.iloc[-1]
         
         # Compile comprehensive analysis
         analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
@@ -80,7 +83,7 @@ class ScalpingAnalysis:
 🔍 SYMBOL: {symbol}
 
 📊 MARKET STRUCTURE:
-- Current Price: ${close_prices.iloc[-1]:.2f}
+- Current Price: ${current_price:.2f}
 
 📈 MARKET METRICS:
 - Historical Volatility: {volatility['historical_volatility']:.2f}%
