@@ -2,8 +2,8 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    # Run at 9:26 AM EST (14:26 UTC) on weekdays
-    - cron: '26 14 * * 1-5'
+    # Run at exactly 9:26:00 AM EST (14:26:00 UTC) on weekdays
+    - cron: '0 14 * * 1-5'
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
@@ -22,13 +22,16 @@ permissions:
 jobs:
   market-analysis:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Set timeout to ensure job doesn't hang
+    timeout-minutes: 5  # Reduced timeout for more precise timing
+    concurrency: 
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true  # Cancel any running job if a new one starts
     
     steps:
     - name: Debug Info
       run: |
         echo "Event name: ${{ github.event_name }}"
-        echo "Current time: $(date)"
+        echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         echo "Timezone info: $(date +%Z) $(date +%z)"
     
     - name: Checkout repository
@@ -48,7 +51,15 @@ jobs:
       env:
         DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
       run: |
-        echo "Starting market analysis at $(date)"
+        # Wait for exact second if needed
+        current_sec=$(date +%S)
+        if [ $current_sec -lt 58 ]; then
+          sleep_time=$((60 - $current_sec))
+          echo "Waiting $sleep_time seconds to start on the minute..."
+          sleep $sleep_time
+        fi
+        
+        echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         if [ "${{ github.event_name }}" = "schedule" ]; then
           # Scheduled run - use auto mode
           echo "Running scheduled analysis..."
@@ -62,4 +73,4 @@ jobs:
           echo "Running manual analysis..."
           python UWS.py --discord
         fi
-        echo "Finished market analysis at $(date)"
+        echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
