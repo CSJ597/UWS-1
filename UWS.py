@@ -125,21 +125,24 @@ class MarketAnalysis:
         # Convert index to EST timezone (data is already tz-aware)
         est_index = data.index.tz_convert('US/Eastern')
         
-        # Plotting the chart
-        plt.plot(est_index, close_prices, label='Close Price', color='blue')
+        # Plot the technical analysis
+        plt.plot(est_index, close_prices, label='Close Price', color='white')
         plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
         plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
         plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
         
-        plt.title('Underground Wall Street\n E-Mini S&P 500 TA', pad=20)
-        plt.xlabel('Time (EST)')
-        plt.ylabel('Price')
+        plt.title('Underground Wall Street\n E-Mini S&P 500 TA', pad=20, color='white')
+        plt.xlabel('Time (EST)', color='white')
+        plt.ylabel('Price', color='white')
         plt.legend()
-        plt.grid(True)
-        plt.xticks(rotation=45)
+        plt.grid(True, color='white', linestyle='--', linewidth=0.5)
+        plt.xticks(rotation=45, color='white')
         
         # Format x-axis to show EST times
         plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%I:%M %p', tz=est_index.tz))
+        
+        # Set the background color
+        plt.gcf().set_facecolor('#a3c1ad')  # Blue color
         
         plt.tight_layout()
         
@@ -214,7 +217,7 @@ class MarketAnalysis:
         try:
             analysis = {
                 'symbol': 'ES',  # Display as ES instead of ES=F
-                'current_price': data['Close'].iloc[-1].item(),
+                'current_price': float(close_prices.iloc[-1].item()),
                 'daily_change': float(returns.iloc[-1].item() * 100),
                 'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
                 'market_trend': self.identify_market_trend(data),
@@ -321,18 +324,15 @@ def generate_market_report(analyses):
 
 🎯 TRADING SIGNALS
 • Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
-• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Low'}
+• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Calm'} 
+{'─' * 15}
 """
         
-        if analysis['volume'] and analysis['avg_volume']:
-            volume_ratio = (analysis['volume'] / analysis['avg_volume']) * 100
-            volume_emoji = "🔥" if volume_ratio > 100 else "💤"
-            report += f"📈 Volume: {volume_emoji} **{volume_ratio:.1f}%** of average\n"
-
-        # Attach technical chart
-        chart = analysis.get('technical_chart')
+        # Add chart image if present
+        chart = analysis.get('technical_chart', None)
 
     return report, chart
+
 
 if __name__ == "__main__":
     analyzer = MarketAnalysis()
@@ -344,3 +344,5 @@ if __name__ == "__main__":
         # Generate and send report
         report, chart = generate_market_report([analysis_results])
         send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+
+    print("Analysis complete. Good Luck!")
