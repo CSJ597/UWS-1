@@ -3,13 +3,13 @@ name: UWS Market Analysis
 on:
   schedule:
     # Run at exactly 9:32:00 AM EST (14:32:00 UTC) on weekdays
-    - cron: '45 14 * * 1-5'
+    - cron: '49 14 * * 1-5'
   push:
     branches: [ main ]  # Trigger on push to main branch
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Type of run'
+        description: 'Type of run (one-time override)'
         required: true
         default: 'auto'
         type: choice
@@ -63,17 +63,22 @@ jobs:
         fi
         
         echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+        
+        # Handle the current run based on trigger type
         if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
           # Scheduled or auto run
           echo "Running auto analysis..."
           python UWS.py --auto
         elif [ "${{ github.event.inputs.run_type }}" = "test" ]; then
           # Test run - print to console
-          echo "Running test analysis..."
+          echo "Running test analysis (one-time override)..."
           python UWS.py --print
+          echo "Note: Next run will revert to auto mode"
         else
           # Manual run - send to Discord
-          echo "Running manual analysis..."
+          echo "Running manual analysis (one-time override)..."
           python UWS.py --discord
+          echo "Note: Next run will revert to auto mode"
         fi
+        
         echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
