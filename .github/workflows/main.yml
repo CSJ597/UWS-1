@@ -2,18 +2,7 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    - cron: '58 16 * * 1-5'  # Scheduled run: 10:20 AM EST (15:20 UTC)
-  workflow_dispatch:  # Manual trigger with optional inputs
-    inputs:
-      run_type:
-        description: 'Run type (scheduled run at 10:20 AM EST will still occur)'
-        required: false
-        default: 'auto'
-        type: choice
-        options:
-          - auto
-          - discord
-          - print
+    - cron: '00 17 * * *'  # Scheduled run: 10:20 AM EST (15:20 UTC)
 
 permissions:
   contents: read
@@ -23,7 +12,6 @@ jobs:
   market-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Separate concurrency for manual and scheduled runs
     concurrency:
       group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.run_id }}
       cancel-in-progress: true  # Prevent overlapping runs
@@ -32,7 +20,7 @@ jobs:
       - name: Debug Info
         run: |
           echo "Event name: ${{ github.event_name }}"
-          echo "Run type: ${{ github.event.inputs.run_type || 'auto' }}"
+          echo "Run type: auto"
           echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
           echo "Timezone info: $(date +%Z) $(date +%z)"
           echo "Next scheduled run is at 10:20 AM EST (15:20 UTC)"
@@ -55,45 +43,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
         run: |
-          # Determine run type
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-              run_type="auto"
-          else
-              run_type="${{ github.event.inputs.run_type || 'auto' }}"
-          fi
-
-          echo "Run type determined as: $run_type"
-
-          # Prevent overlapping manual and scheduled runs
-          scheduled_hour=15
-          scheduled_minute=20
-          current_hour=$(date -u +%H)
-          current_minute=$(date -u +%M)
-
-          if [ "$run_type" = "auto" ] && [ "$current_hour" -eq "$scheduled_hour" ] && [ "$current_minute" -eq "$scheduled_minute" ]; then
-              echo "Skipping run because a scheduled run is due at 15:20 UTC."
-              exit 0
-          fi
-
-          # Wait for exact second if needed
-          current_sec=$(date +%S)
-          if [ $current_sec -lt 58 ]; then
-              sleep_time=$((60 - $current_sec))
-              echo "Waiting $sleep_time seconds to start on the minute..."
-              sleep $sleep_time
-          fi
-
-          echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-
-          if [ "$run_type" = "auto" ]; then
-              echo "Running auto analysis..."
-              python UWS.py --auto
-          elif [ "$run_type" = "print" ]; then
-              echo "Running manual analysis (print to console)..."
-              python UWS.py --print
-          elif [ "$run_type" = "discord" ]; then
-              echo "Running manual analysis (send to Discord)..."
-              python UWS.py --discord
-          fi
+          echo "Running market analysis..."
+          python UWS.py --auto
 
           echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
