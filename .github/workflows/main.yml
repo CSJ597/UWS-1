@@ -3,31 +3,20 @@ name: UWS Market Analysis
 on:
   schedule:
     # To change the time:
-    # '20 15 * * 1-5' means:
-    #   20 = minute (0-59)
-    #   15 = hour in UTC (15 UTC = 10 AM EST)
+    # '42 16 * * *' means:
+    #   42 = minute (0-59)
+    #   16 = hour in UTC (16 UTC = 11 AM EST)
     #   * = any day of month
     #   * = any month
-    #   1-5 = Monday to Friday
-    - cron: '39 15 * * 1-5'  # Runs at 10:20 AM EST (15:20 UTC)
-  workflow_dispatch:  # Manual trigger with optional inputs
-    inputs:
-      run_type:
-        description: 'Run type (daily scheduled run at 11:39 AM EST will always occur, regardless of manual runs)'
-        required: true
-        default: 'auto'
-        type: choice
-        options:
-          - auto
-          - discord
-          - print
+    #   * = any day of the week
+    - cron: '42 16 * * *'  # Runs at 11:42 AM EST (16:42 UTC)
 
 permissions:
   contents: read
   actions: write
 
 jobs:
-  # Separate job for scheduled runs
+  # Job for scheduled runs
   scheduled-run:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
@@ -58,47 +47,3 @@ jobs:
         echo "Starting SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         python UWS.py --auto
         echo "Finished SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-
-  # Separate job for manual runs
-  manual-run:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-    - name: Debug Info
-      run: |
-        echo "MANUAL RUN"
-        echo "Run type: ${{ github.event.inputs.run_type }}"
-        echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        echo "Note: Daily scheduled run will still occur at 10:20 AM EST, regardless of this manual run"
-    
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install yfinance numpy pandas matplotlib seaborn requests
-        
-    - name: Run manual analysis
-      env:
-        DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-      run: |
-        echo "Starting MANUAL market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        if [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
-          echo "Running manual auto analysis..."
-          python UWS.py --auto
-        elif [ "${{ github.event.inputs.run_type }}" = "print" ]; then
-          echo "Running manual analysis (print to console)..."
-          python UWS.py --print
-        else
-          echo "Running manual analysis (send to Discord)..."
-          python UWS.py --discord
-        fi
-        echo "Finished MANUAL market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        echo "Note: Daily scheduled run will still occur at 10:20 AM EST, regardless of this manual run"
