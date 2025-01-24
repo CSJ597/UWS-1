@@ -1,15 +1,9 @@
-name: UWS Market Analysis
+name: Daily UWS Analysis
 
 on:
   schedule:
-    # To change the time:
-    # '42 16 * * *' means:
-    #   42 = minute (0-59)
-    #   16 = hour in UTC (16 UTC = 11 AM EST)
-    #   * = any day of month
-    #   * = any month
-    #   * = any day of the week
-    - cron: '45 16 * * *'  # Runs at 11:42 AM EST (16:42 UTC)
+    # This cron expression runs at 11:47 AM EST (16:47 UTC) every day
+    - cron: '47 16 * * *'
 
 permissions:
   contents: read
