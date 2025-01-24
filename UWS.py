@@ -27,9 +27,9 @@ class ScalpingAnalysis:
         histogram = macd_line - signal_line
         
         return {
-            'macd_line': macd_line.iloc[-1],
-            'signal_line': signal_line.iloc[-1],
-            'histogram': histogram.iloc[-1]
+            'macd_line': macd_line.iloc[-1] if len(macd_line) > 0 else np.nan,
+            'signal_line': signal_line.iloc[-1] if len(signal_line) > 0 else np.nan,
+            'histogram': histogram.iloc[-1] if len(histogram) > 0 else np.nan
         }
 
     def _custom_rsi(self, prices, periods=14):
@@ -44,14 +44,17 @@ class ScalpingAnalysis:
         rs = avg_gain / avg_loss
         rsi = 100.0 - (100.0 / (1.0 + rs))
         
-        return rsi.iloc[-1]
+        return rsi.iloc[-1] if not rsi.empty else np.nan
 
     def get_market_sentiment(self):
         """Fetch market sentiment and news from Finnhub"""
         try:
             news_url = f"https://finnhub.io/api/v1/news?category=general&token={self.finnhub_api_key}"
             news_response = requests.get(news_url)
-            news_data = news_response.json()[:3]  # Top 3 news items
+            news_data = news_response.json()
+            
+            # Safely extract top 3 news items
+            news_data = news_data[:3] if isinstance(news_data, list) else []
             
             return {
                 "news": [
