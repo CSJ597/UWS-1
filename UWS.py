@@ -14,13 +14,10 @@ class MarketAnalysis:
     def __init__(self):
         """Initialize analysis with default configurations"""
         self.analysis_config = {
-            'period': '5d',
+            'period': '1d',  # Changed to 1 day
             'interval': '5m',
-            'technical_indicators': {
-                'bollinger_window': 20
-            }
         }
-        self.allowed_symbols = ['ES=F', '^GSPC']
+        self.allowed_symbols = ['ES=F']
 
     def fetch_market_data(self, symbol):
         """
@@ -33,7 +30,7 @@ class MarketAnalysis:
             tuple: (market data DataFrame, error message or None)
         """
         if symbol not in self.allowed_symbols:
-            return None, f"Symbol {symbol} not allowed. Only ES Futures and S&P 500 are permitted."
+            return None, f"Symbol {symbol} not allowed. Only ES Futures are permitted."
         
         try:
             # Fetch detailed market data
@@ -47,10 +44,44 @@ class MarketAnalysis:
             if data.empty:
                 return None, f"No data available for {symbol}"
             
-            return data, None
+            # Filter to last 12 hours
+            last_12_hours = data.last('12H')
+            return last_12_hours, None
         
         except Exception as e:
             return None, f"Data fetch error for {symbol}: {str(e)}"
+
+    def identify_market_trend(self, data):
+        """
+        Identify market trend (Trending or Ranging)
+        
+        Args:
+            data (pd.DataFrame): Market price data
+        
+        Returns:
+            str: Market trend classification
+        """
+        # Calculate price range and standard deviation
+        price_range = data['High'].max() - data['Low'].min()
+        avg_price = data['Close'].mean()
+        range_percentage = (price_range / avg_price) * 100
+        
+        # Use standard deviation of prices to detect ranging
+        price_std = data['Close'].std()
+        price_mean = data['Close'].mean()
+        
+        # Coefficient of variation to assess trend
+        cv = (price_std / price_mean) * 100
+        
+        # Trend classification logic
+        if cv < 0.5:  # Very low variation
+            return "RANGING"
+        elif data['Close'].iloc[-1] > data['Close'].iloc[0] and price_range > 0:
+            return "BULLISH TREND"
+        elif data['Close'].iloc[-1] < data['Close'].iloc[0] and price_range > 0:
+            return "BEARISH TREND"
+        else:
+            return "RANGING"
 
     def generate_technical_chart(self, data, symbol):
         """
@@ -68,7 +99,7 @@ class MarketAnalysis:
         
         # Price and Bollinger Bands
         close_prices = data['Close']
-        window = self.analysis_config['technical_indicators']['bollinger_window']
+        window = 20  # Fixed window size
         
         middle_band = close_prices.rolling(window=window).mean()
         std_dev = close_prices.rolling(window=window).std()
@@ -80,7 +111,7 @@ class MarketAnalysis:
         plt.plot(data.index, upper_band, label='Upper Band', color='red', linestyle=':')
         plt.plot(data.index, lower_band, label='Lower Band', color='green', linestyle=':')
         
-        plt.title(f'{symbol} Technical Analysis')
+        plt.title(f'{symbol} Technical Analysis (Last 12 Hours)')
         plt.xlabel('Time')
         plt.ylabel('Price')
         plt.legend()
@@ -127,6 +158,7 @@ class MarketAnalysis:
             'current_price': safe_scalar(close_prices),
             'daily_change': safe_scalar(returns) * 100,
             'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+            'market_trend': self.identify_market_trend(data),
             'technical_chart': self.generate_technical_chart(data, symbol)
         }
         
@@ -173,8 +205,8 @@ def generate_market_report(analyses):
     Returns:
         tuple: Formatted market report and chart (if available)
     """
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    report = f"🚀 Market Analysis Report 📊\nGenerated at: {current_time}\n\n"
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    report = f"🚀 SCALPING INSIGHTS: 📊\nDate: {current_date}\n\n"
     chart = None
     
     for analysis in analyses:
@@ -182,11 +214,19 @@ def generate_market_report(analyses):
             report += f"❌ Error: {analysis['error']}\n\n"
             continue
         
+        # Trading Insights
+        volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+        
         report += f"""
 🔍 Symbol: {analysis['symbol']}
 💰 Current Price: ${analysis['current_price']:.2f}
 📈 Daily Change: {analysis['daily_change']:.2f}%
-🌪️ Volatility: {analysis['volatility']:.2f}%
+🌪️ Volatility: {analysis['volatility']:.2f}% ({volatility_status})
+
+🎯 SCALPING INSIGHTS:
+- Market Trend: {analysis['market_trend']}
+- Volatility Level: {volatility_status}
+- Price Action: {'Momentum Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
 """ + "-"*50 + "\n\n"
         
         # Use the first available chart
@@ -199,8 +239,8 @@ def main():
     # Initialize market analysis
     market_analyzer = MarketAnalysis()
     
-    # Analyze ES Futures and S&P 500
-    symbols = ['ES=F', '^GSPC']
+    # Analyze ES Futures
+    symbols = ['ES=F']
     
     # Perform analyses
     analyses = [market_analyzer.analyze_market(symbol) for symbol in symbols]
