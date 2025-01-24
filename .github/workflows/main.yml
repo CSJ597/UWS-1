@@ -9,7 +9,7 @@ on:
     #   * = any day of month
     #   * = any month
     #   1-5 = Monday to Friday
-    - cron: '20 15 * * 1-5'  # Runs at 10:20 AM EST (15:20 UTC)
+    - cron: '28 15 * * 1-5'  # Runs at 10:20 AM EST (15:20 UTC)
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
@@ -27,17 +27,21 @@ permissions:
   actions: write
 
 jobs:
-  # Separate job for scheduled runs
-  scheduled-run:
-    if: github.event_name == 'schedule'
+  market-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.inputs.run_type || 'scheduled' }}
+      cancel-in-progress: false  # Don't cancel other runs
+    
     steps:
     - name: Debug Info
       run: |
-        echo "SCHEDULED RUN"
+        echo "Event name: ${{ github.event_name }}"
+        echo "Run type: ${{ github.event.inputs.run_type || 'scheduled' }}"
         echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         echo "Timezone info: $(date +%Z) $(date +%z)"
+        echo "Next scheduled run: 10:20 AM EST"
     
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -52,55 +56,32 @@ jobs:
         python -m pip install --upgrade pip
         pip install yfinance numpy pandas matplotlib seaborn requests
         
-    - name: Run scheduled analysis
+    - name: Run market analysis
       env:
         DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
       run: |
-        echo "Starting SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        python UWS.py --auto
-        echo "Finished SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-
-  # Separate job for manual runs
-  manual-run:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-    - name: Debug Info
-      run: |
-        echo "MANUAL RUN"
-        echo "Run type: ${{ github.event.inputs.run_type }}"
-        echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        echo "Timezone info: $(date +%Z) $(date +%z)"
-        echo "Note: Daily scheduled run will still occur at 10:20 AM EST"
-    
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+        # Wait for exact second if needed
+        current_sec=$(date +%S)
+        if [ $current_sec -lt 58 ]; then
+          sleep_time=$((60 - $current_sec))
+          echo "Waiting $sleep_time seconds to start on the minute..."
+          sleep $sleep_time
+        fi
         
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install yfinance numpy pandas matplotlib seaborn requests
+        echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         
-    - name: Run manual analysis
-      env:
-        DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-      run: |
-        echo "Starting MANUAL market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        if [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
-          echo "Running manual auto analysis..."
+        if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
+          # Scheduled or manual auto run
+          echo "Running auto analysis..."
           python UWS.py --auto
         elif [ "${{ github.event.inputs.run_type }}" = "print" ]; then
+          # Manual run - print to console
           echo "Running manual analysis (print to console)..."
           python UWS.py --print
         else
+          # Manual run - send to Discord
           echo "Running manual analysis (send to Discord)..."
           python UWS.py --discord
         fi
-        echo "Finished MANUAL market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        echo "Note: Daily scheduled run will still occur at 10:20 AM EST"
+        
+        echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
