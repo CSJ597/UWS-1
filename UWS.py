@@ -224,34 +224,22 @@ class MarketAnalysis:
                 'description': info.get('shortName', 'E-mini S&P 500 Futures')
             }
             
-            # Format market data with more context
+            # Format market data with essential info
             market_data = (
-                f"ES Analysis:\n"
-                f"Current: ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
-                f"Session High: ${analysis['session_high']:.2f}\n"
-                f"Session Low: ${analysis['session_low']:.2f}\n"
-                f"Previous Close: ${analysis['prev_close']:.2f}\n"
-                f"Trend State: {trend}"
+                f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) "
+                f"H: ${analysis['session_high']:.2f} "
+                f"L: ${analysis['session_low']:.2f} "
+                f"PC: ${analysis['prev_close']:.2f} "
+                f"| {trend}"
             )
             
-            # Get AI analysis with more thorough prompt
+            # Get AI analysis with concise prompt
             payload = {
                 "model": "gpt-4",
                 "messages": [
                     {
                         "role": "system", 
-                        "content": (
-                            "You are analyzing the E-mini S&P 500 futures market. Provide a thorough analysis focusing on:\n"
-                            "1. Price Action: Analyze the current price relative to session high/low and previous close\n"
-                            "2. Market Structure: Identify key price levels and market phases\n"
-                            "3. Momentum: Assess strength of moves and potential reversals\n"
-                            "4. Directional Bias: Determine likely short-term direction\n\n"
-                            "Rules:\n"
-                            "- Focus only on price action and market structure\n"
-                            "- Do not reference any technical indicators\n"
-                            "- Be specific about price levels\n"
-                            "- Keep analysis clear and actionable"
-                        )
+                        "content": "Analyze ES price action and structure. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. No indicators."
                     },
                     {"role": "user", "content": market_data}
                 ],
