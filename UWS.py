@@ -539,7 +539,7 @@ if __name__ == "__main__":
             # Check if it's a weekday (Monday = 0, Sunday = 6)
             if now.weekday() < 5:  # Monday to Friday
                 # Check if it's 5:06 PM
-                if now.hour == 17 and now.minute == 6:
+                if now.hour == 17 and now.minute == 13:
                     logging.info(f"Starting market analysis at {now}")
                     
                     try:
