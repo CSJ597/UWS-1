@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Run type (scheduled run at 10:20 AM EST will still occur)'
+        description: 'Run type (scheduled run at 10:54 AM EST will still occur)'
         required: false
         default: 'auto'
         type: choice
