@@ -15,7 +15,7 @@ class MarketAnalysis:
         """Initialize analysis with default configurations"""
         self.analysis_config = {
             'period': '1d',  # Changed to 1 day
-            'interval': '5m',
+            'interval': '2m',  # Changed from 5m to 2m
         }
         self.allowed_symbols = ['ES=F']
 
@@ -45,7 +45,7 @@ class MarketAnalysis:
                 return None, f"No data available for {symbol}"
             
             # Get last 12 hours of data
-            last_12_hours = data.tail(12 * 12)  # 12 intervals per hour * 12 hours
+            last_12_hours = data.tail(12 * 6)  # 6 intervals per hour * 12 hours
             
             return last_12_hours, None
         
@@ -129,7 +129,7 @@ class MarketAnalysis:
         plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
         plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
         
-        plt.title(f'{symbol} Technical Analysis (Last 12 Hours) - EST')
+        plt.title('Underground Wall Street\n E-Mini S&P 500 TA', pad=20)
         plt.xlabel('Time (EST)')
         plt.ylabel('Price')
         plt.legend()
@@ -249,10 +249,9 @@ def generate_market_report(analyses):
         tuple: Formatted market report and chart (if available)
     """
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    current_time = datetime.datetime.now().strftime("%I:%M %p EST")
     report = f"""
 🎯 UWS Update 🎯
-📅 {current_date} | ⏰ {current_time}
+📅 {current_date}
 {'═' * 40}
 """
     chart = None
