@@ -2,6 +2,8 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import pytz
 import seaborn as sns
 import requests
 from io import BytesIO
@@ -126,6 +128,10 @@ class MarketAnalysis:
         plt.legend(facecolor='none', edgecolor='none', fontsize='small', loc='upper left')
         plt.grid(True, color='white')  # Set grid color to white
 
+        # Format x-axis to display times in EST
+        plt.xticks(rotation=45, ha='right')
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S', tz=pytz.timezone('US/Eastern')))
+
         # Save plot to buffer with matching facecolor
         buffer = BytesIO()
         plt.savefig(buffer, format='png', bbox_inches='tight', facecolor="#a3c1ad", transparent=True)  # Ensure facecolor matches
@@ -211,6 +217,15 @@ class MarketAnalysis:
             }
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
+        
+        # Make API request for AI analysis
+        api_key = '512dc9f0dfe54666b0d98ff42746dd13'
+        analysis_response = requests.post('https://api.aimlapi.com/short_analysis', json={'data': analysis, 'model': 'DeepSeek LLM Chat (67B)'}, headers={'Authorization': f'Bearer {api_key}'})
+        if analysis_response.status_code == 200:
+            ai_analysis = analysis_response.json().get('analysis', 'No analysis available')
+        else:
+            ai_analysis = 'Failed to retrieve analysis'
+        analysis['ai_analysis'] = ai_analysis
         
         return analysis
 
@@ -305,6 +320,7 @@ def generate_market_report(analyses):
 🎯 TRADING SIGNALS
 • Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
 • Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Calm'} 
+• AI Analysis: {analysis['ai_analysis']}
 {'─' * 15}
 """
         
