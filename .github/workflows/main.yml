@@ -29,7 +29,7 @@ jobs:
 
     - name: Run scalping analysis script
       run: |
-        python scalping_analysis.py
+        python UWS.py
 
     - name: Notify result (optional)
       run: |
