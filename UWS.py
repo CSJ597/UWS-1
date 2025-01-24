@@ -123,7 +123,7 @@ class MarketAnalysis:
         plt.title('Underground Wall Street\nE-Mini S&P 500 TA', pad=20, color='white')
         plt.xlabel('Time (EST)', color='white')
         plt.ylabel('Price', color='white')
-        plt.legend(facecolor='transparent', edgecolor='white', fontsize='small', loc='upper left')
+        plt.legend( edgecolor='white', fontsize='small', loc='upper left')
         plt.grid(True, color='white')  # Set grid color to white
 
         # Save plot to buffer with matching facecolor
