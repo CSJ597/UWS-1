@@ -2,172 +2,233 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import requests
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import BytesIO
+import base64
 
-class ScalpingAnalysis:
-    def get_yahoo_data(self, symbol='ES=F', period='1d', interval='5m'):
+class MarketAnalysis:
+    def __init__(self):
+        """Initialize analysis with default configurations"""
+        self.analysis_config = {
+            'period': '5d',
+            'interval': '5m',
+            'technical_indicators': {
+                'bollinger_window': 20,
+                'stochastic_periods': 14
+            }
+        }
+
+    def fetch_market_data(self, symbol):
         """
-        Fetch detailed market data from Yahoo Finance
+        Fetch comprehensive market data with error handling
         
         Args:
             symbol (str): Stock/futures symbol to analyze
-            period (str): Time period for data retrieval
-            interval (str): Candle interval
         
         Returns:
-            pandas.DataFrame: Detailed market data
+            tuple: (market data DataFrame, error message or None)
         """
         try:
-            data = yf.download(symbol, period=period, interval=interval)
-            return data
+            # Fetch detailed market data
+            data = yf.download(
+                symbol, 
+                period=self.analysis_config['period'], 
+                interval=self.analysis_config['interval']
+            )
+            
+            # Validate data
+            if data.empty:
+                return None, f"No data available for {symbol}"
+            
+            return data, None
+        
         except Exception as e:
-            print(f"Yahoo Finance Data Fetch Error: {e}")
-            return pd.DataFrame()
-    
-    def _calculate_bollinger_bands(self, prices, window=20, num_std=2):
-        """Calculate Bollinger Bands using Yahoo Finance style"""
-        middle_band = prices.rolling(window=window).mean()
-        std_dev = prices.rolling(window=window).std()
-        upper_band = middle_band + (std_dev * num_std)
-        lower_band = middle_band - (std_dev * num_std)
-        
-        # Return latest values
-        return {
-            'middle_band': float(middle_band.iloc[-1]) if not middle_band.empty else np.nan,
-            'upper_band': float(upper_band.iloc[-1]) if not upper_band.empty else np.nan,
-            'lower_band': float(lower_band.iloc[-1]) if not lower_band.empty else np.nan
-        }
+            return None, f"Data fetch error for {symbol}: {str(e)}"
 
-    def _calculate_stochastic_oscillator(self, data, periods=14):
-        """Calculate Stochastic Oscillator"""
-        high = data['High']
-        low = data['Low']
-        close = data['Close']
+    def fetch_company_info(self, symbol):
+        """
+        Retrieve comprehensive company/symbol information
         
-        lowest_low = low.rolling(window=periods).min()
-        highest_high = high.rolling(window=periods).max()
+        Args:
+            symbol (str): Stock/futures symbol
         
-        # %K line (Stochastic)
-        k_line = ((close - lowest_low) / (highest_high - lowest_low)) * 100
-        
-        # %D line (Signal line)
-        d_line = k_line.rolling(window=3).mean()
-        
-        return {
-            'k_line': float(k_line.iloc[-1]) if not k_line.empty else np.nan,
-            'd_line': float(d_line.iloc[-1]) if not d_line.empty else np.nan
-        }
+        Returns:
+            dict: Company information
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            
+            # Safely extract key information
+            return {
+                'name': info.get('longName', symbol),
+                'sector': info.get('sector', 'N/A'),
+                'industry': info.get('industry', 'N/A'),
+                'market_cap': info.get('marketCap', 'N/A'),
+                'pe_ratio': info.get('trailingPE', 'N/A')
+            }
+        except Exception as e:
+            print(f"Error fetching company info for {symbol}: {e}")
+            return {}
 
-    def advanced_scalping_analysis(self, symbol='ES=F'):
-        """Comprehensive scalping preparation analysis"""
-        # Fetch data from Yahoo Finance
-        data = self.get_yahoo_data(symbol)
+    def fetch_recent_news(self, symbol):
+        """
+        Retrieve recent news for the symbol
         
-        if data.empty:
-            return f"Unable to fetch market data for {symbol}"
+        Args:
+            symbol (str): Stock/futures symbol
         
-        # Price analysis
+        Returns:
+            list: Recent news articles
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            news = ticker.news
+            
+            # Format news with key details
+            formatted_news = [
+                {
+                    'title': article.get('title', 'Untitled'),
+                    'publisher': article.get('publisher', 'Unknown'),
+                    'link': article.get('link', '')
+                } for article in news[:3]  # Limit to 3 recent news
+            ]
+            
+            return formatted_news
+        except Exception as e:
+            print(f"Error fetching news for {symbol}: {e}")
+            return []
+
+    def generate_technical_chart(self, data, symbol):
+        """
+        Generate a comprehensive technical analysis chart
+        
+        Args:
+            data (pd.DataFrame): Market price data
+            symbol (str): Stock/futures symbol
+        
+        Returns:
+            str: Base64 encoded chart image
+        """
+        plt.figure(figsize=(12, 8))
+        plt.style.use('seaborn')
+        
+        # Price and Bollinger Bands
         close_prices = data['Close']
+        window = self.analysis_config['technical_indicators']['bollinger_window']
         
-        # Volatility calculation
+        middle_band = close_prices.rolling(window=window).mean()
+        std_dev = close_prices.rolling(window=window).std()
+        upper_band = middle_band + (std_dev * 2)
+        lower_band = middle_band - (std_dev * 2)
+        
+        plt.plot(data.index, close_prices, label='Close Price', color='blue')
+        plt.plot(data.index, middle_band, label='Middle Band', color='gray', linestyle='--')
+        plt.plot(data.index, upper_band, label='Upper Band', color='red', linestyle=':')
+        plt.plot(data.index, lower_band, label='Lower Band', color='green', linestyle=':')
+        
+        plt.title(f'{symbol} Technical Analysis')
+        plt.xlabel('Time')
+        plt.ylabel('Price')
+        plt.legend()
+        plt.grid(True)
+        
+        # Save plot to buffer
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png')
+        plt.close()
+        
+        # Encode image to base64
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    def analyze_market(self, symbol='ES=F'):
+        """
+        Comprehensive market analysis
+        
+        Args:
+            symbol (str): Stock/futures symbol to analyze
+        
+        Returns:
+            dict: Comprehensive market analysis results
+        """
+        # Fetch market data
+        data, data_error = self.fetch_market_data(symbol)
+        if data_error:
+            return {'error': data_error}
+        
+        # Analyze data
+        close_prices = data['Close']
         returns = close_prices.pct_change()
         
-        # Safely extract scalar values
-        current_price = float(close_prices.iloc[-1])
-        historical_volatility = float(np.std(returns.dropna()) * np.sqrt(252) * 100)
-        current_daily_change = float(returns.iloc[-1] * 100)
+        # Compute metrics
+        analysis = {
+            'symbol': symbol,
+            'current_price': close_prices.iloc[-1],
+            'daily_change': returns.iloc[-1] * 100,
+            'volatility': np.std(returns.dropna()) * np.sqrt(252) * 100,
+            'technical_chart': self.generate_technical_chart(data, symbol),
+            'company_info': self.fetch_company_info(symbol),
+            'news': self.fetch_recent_news(symbol)
+        }
         
-        # Technical indicators
-        bollinger = self._calculate_bollinger_bands(close_prices)
-        stochastic = self._calculate_stochastic_oscillator(data)
-        
-        # Compile comprehensive analysis
-        analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
-
-🔍 SYMBOL: {symbol}
-
-📊 MARKET STRUCTURE:
-- Current Price: ${current_price:.2f}
-
-📈 MARKET METRICS:
-- Historical Volatility: {historical_volatility:.2f}%
-- Daily Price Change: {current_daily_change:.2f}%
-
-🚀 TECHNICAL INDICATORS:
-- Bollinger Middle Band: ${bollinger['middle_band']:.2f}
-- Bollinger Upper Band: ${bollinger['upper_band']:.2f}
-- Bollinger Lower Band: ${bollinger['lower_band']:.2f}
-- Stochastic %K: {stochastic['k_line']:.2f}
-- Stochastic %D: {stochastic['d_line']:.2f}
-
-💡 SCALPING INSIGHTS:
-{self._generate_scalping_insights(bollinger, stochastic, {
-    'historical_volatility': historical_volatility, 
-    'current_price': current_price
-})}
-"""
         return analysis
 
-    def _generate_scalping_insights(self, bollinger, stochastic, context):
-        """Generate scalping insights based on indicators"""
-        insights = []
+def generate_discord_report(analyses):
+    """
+    Generate a comprehensive Discord report
+    
+    Args:
+        analyses (list): List of market analyses
+    
+    Returns:
+        str: Formatted Discord report
+    """
+    report = "🚀 Market Analysis Report 📊\n\n"
+    
+    for analysis in analyses:
+        if 'error' in analysis:
+            report += f"❌ Error: {analysis['error']}\n\n"
+            continue
         
-        # Bollinger Band Analysis
-        if context['current_price'] > bollinger['upper_band']:
-            insights.append("🔴 Price Above Upper Band: Potential Overextension")
-        elif context['current_price'] < bollinger['lower_band']:
-            insights.append("🟢 Price Below Lower Band: Potential Reversal")
-        else:
-            insights.append("⚪ Price Within Bands: Neutral Trend")
-        
-        # Stochastic Oscillator Analysis
-        if stochastic['k_line'] > 80:
-            insights.append("⚠️ Stochastic Overbought: Consider Short Entry")
-        elif stochastic['k_line'] < 20:
-            insights.append("⚠️ Stochastic Oversold: Consider Long Entry")
-        
-        # Volatility Recommendation
-        if context['historical_volatility'] > 2:
-            insights.append("🔥 High Volatility: Tighter stop-losses recommended")
-        else:
-            insights.append("❄️ Low Volatility: Be cautious of false breakouts")
-        
-        return chr(10).join(insights)
+        report += f"""
+🔍 Symbol: {analysis['symbol']}
+💰 Current Price: ${analysis['current_price']:.2f}
+📈 Daily Change: {analysis['daily_change']:.2f}%
+🌪️ Volatility: {analysis['volatility']:.2f}%
 
-def send_discord_message(webhook_url, message):
-    """Send message to Discord webhook"""
-    max_length = 2000
-    for i in range(0, len(message), max_length):
-        chunk = message[i:i+max_length]
-        try:
-            response = requests.post(webhook_url, json={"content": chunk})
-            response.raise_for_status()
-        except Exception as e:
-            print(f"Error sending Discord message: {e}")
+ℹ️ Company Details:
+• Name: {analysis['company_info'].get('name', 'N/A')}
+• Sector: {analysis['company_info'].get('sector', 'N/A')}
+• Market Cap: {analysis['company_info'].get('market_cap', 'N/A')}
+
+🗞️ Recent News:
+"""
+        for news in analysis['news']:
+            report += f"• {news['title']} (via {news['publisher']})\n"
+        
+        report += "\n" + "-"*50 + "\n\n"
+    
+    return report
 
 def main():
-    # Discord webhook URL
-    webhook_url = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+    # Initialize market analysis
+    market_analyzer = MarketAnalysis()
     
-    # Initialize scalping analysis
-    scalping_analysis = ScalpingAnalysis()
+    # Symbols to analyze
+    symbols = ['ES=F', '^GSPC', 'AAPL']
     
-    # Analyze ES Futures and S&P 500
-    symbols = ['ES=F', '^GSPC']
+    # Perform analyses
+    analyses = [market_analyzer.analyze_market(symbol) for symbol in symbols]
     
-    # Collect all analyses
-    full_analysis = ""
+    # Generate report
+    report = generate_discord_report(analyses)
     
-    for symbol in symbols:
-        try:
-            # Generate analysis for each symbol
-            analysis = scalping_analysis.advanced_scalping_analysis(symbol)
-            full_analysis += analysis + "\n\n" + "-"*50 + "\n\n"
-        except Exception as e:
-            print(f"Error analyzing {symbol}: {e}")
+    # Optional: Send to Discord or print
+    print(report)
     
-    # Send analysis to Discord
-    send_discord_message(webhook_url, full_analysis)
-    print("Analysis sent to Discord successfully!")
+    # Uncomment and replace with your webhook if you want to send to Discord
+    # send_discord_message(webhook_url, report)
 
 if __name__ == "__main__":
     main()
