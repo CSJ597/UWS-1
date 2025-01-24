@@ -1,11 +1,14 @@
 import yfinance as yf
 import numpy as np
 import pandas as pd
-import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
 from io import BytesIO
 import base64
+
+# REPLACE THIS WITH YOUR ACTUAL DISCORD WEBHOOK URL
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 
 class MarketAnalysis:
     def __init__(self):
@@ -14,10 +17,10 @@ class MarketAnalysis:
             'period': '5d',
             'interval': '5m',
             'technical_indicators': {
-                'bollinger_window': 20,
-                'stochastic_periods': 14
+                'bollinger_window': 20
             }
         }
+        self.allowed_symbols = ['ES=F']
 
     def fetch_market_data(self, symbol):
         """
@@ -29,6 +32,9 @@ class MarketAnalysis:
         Returns:
             tuple: (market data DataFrame, error message or None)
         """
+        if symbol not in self.allowed_symbols:
+            return None, f"Symbol {symbol} not allowed. Only ES Futures and S&P 500 are permitted."
+        
         try:
             # Fetch detailed market data
             data = yf.download(
@@ -46,60 +52,6 @@ class MarketAnalysis:
         except Exception as e:
             return None, f"Data fetch error for {symbol}: {str(e)}"
 
-    def fetch_company_info(self, symbol):
-        """
-        Retrieve comprehensive company/symbol information
-        
-        Args:
-            symbol (str): Stock/futures symbol
-        
-        Returns:
-            dict: Company information
-        """
-        try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            
-            # Safely extract key information
-            return {
-                'name': info.get('longName', symbol),
-                'sector': info.get('sector', 'N/A'),
-                'industry': info.get('industry', 'N/A'),
-                'market_cap': info.get('marketCap', 'N/A'),
-                'pe_ratio': info.get('trailingPE', 'N/A')
-            }
-        except Exception as e:
-            print(f"Error fetching company info for {symbol}: {e}")
-            return {}
-
-    def fetch_recent_news(self, symbol):
-        """
-        Retrieve recent news for the symbol
-        
-        Args:
-            symbol (str): Stock/futures symbol
-        
-        Returns:
-            list: Recent news articles
-        """
-        try:
-            ticker = yf.Ticker(symbol)
-            news = ticker.news
-            
-            # Format news with key details
-            formatted_news = [
-                {
-                    'title': article.get('title', 'Untitled'),
-                    'publisher': article.get('publisher', 'Unknown'),
-                    'link': article.get('link', '')
-                } for article in news[:3]  # Limit to 3 recent news
-            ]
-            
-            return formatted_news
-        except Exception as e:
-            print(f"Error fetching news for {symbol}: {e}")
-            return []
-
     def generate_technical_chart(self, data, symbol):
         """
         Generate a comprehensive technical analysis chart
@@ -112,7 +64,7 @@ class MarketAnalysis:
             str: Base64 encoded chart image
         """
         plt.figure(figsize=(12, 8))
-        plt.style.use('seaborn')
+        plt.style.use('seaborn-v0_8')
         
         # Price and Bollinger Bands
         close_prices = data['Close']
@@ -133,10 +85,11 @@ class MarketAnalysis:
         plt.ylabel('Price')
         plt.legend()
         plt.grid(True)
+        plt.xticks(rotation=45)
         
         # Save plot to buffer
         buffer = BytesIO()
-        plt.savefig(buffer, format='png')
+        plt.savefig(buffer, format='png', bbox_inches='tight')
         plt.close()
         
         # Encode image to base64
@@ -161,30 +114,60 @@ class MarketAnalysis:
         close_prices = data['Close']
         returns = close_prices.pct_change()
         
+        # Safely convert to scalar values
+        def safe_scalar(series):
+            try:
+                return float(series.iloc[-1]) if not series.empty else np.nan
+            except Exception:
+                return np.nan
+        
         # Compute metrics
         analysis = {
             'symbol': symbol,
-            'current_price': close_prices.iloc[-1],
-            'daily_change': returns.iloc[-1] * 100,
-            'volatility': np.std(returns.dropna()) * np.sqrt(252) * 100,
-            'technical_chart': self.generate_technical_chart(data, symbol),
-            'company_info': self.fetch_company_info(symbol),
-            'news': self.fetch_recent_news(symbol)
+            'current_price': safe_scalar(close_prices),
+            'daily_change': safe_scalar(returns) * 100,
+            'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+            'technical_chart': self.generate_technical_chart(data, symbol)
         }
         
         return analysis
 
-def generate_discord_report(analyses):
+def send_discord_message(webhook_url, message, chart_base64=None):
     """
-    Generate a comprehensive Discord report
+    Send message to Discord webhook with optional image
+    
+    Args:
+        webhook_url (str): Discord webhook URL
+        message (str): Text message to send
+        chart_base64 (str, optional): Base64 encoded image
+    """
+    payload = {"content": message}
+    
+    if chart_base64:
+        # Prepare the image for Discord
+        payload['file'] = {
+            'chart.png': base64.b64decode(chart_base64)
+        }
+    
+    try:
+        response = requests.post(webhook_url, json=payload)
+        response.raise_for_status()
+        print("Message sent successfully to Discord!")
+    except Exception as e:
+        print(f"Error sending message to Discord: {e}")
+
+def generate_market_report(analyses):
+    """
+    Generate a comprehensive market report
     
     Args:
         analyses (list): List of market analyses
     
     Returns:
-        str: Formatted Discord report
+        tuple: Formatted market report and chart (if available)
     """
     report = "🚀 Market Analysis Report 📊\n\n"
+    chart = None
     
     for analysis in analyses:
         if 'error' in analysis:
@@ -196,39 +179,34 @@ def generate_discord_report(analyses):
 💰 Current Price: ${analysis['current_price']:.2f}
 📈 Daily Change: {analysis['daily_change']:.2f}%
 🌪️ Volatility: {analysis['volatility']:.2f}%
-
-ℹ️ Company Details:
-• Name: {analysis['company_info'].get('name', 'N/A')}
-• Sector: {analysis['company_info'].get('sector', 'N/A')}
-• Market Cap: {analysis['company_info'].get('market_cap', 'N/A')}
-
-🗞️ Recent News:
-"""
-        for news in analysis['news']:
-            report += f"• {news['title']} (via {news['publisher']})\n"
+""" + "-"*50 + "\n\n"
         
-        report += "\n" + "-"*50 + "\n\n"
+        # Use the first available chart
+        if not chart:
+            chart = analysis['technical_chart']
     
-    return report
+    return report, chart
 
 def main():
+    # Validate webhook URL
+    if DISCORD_WEBHOOK_URL == "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw":
+        print("ERROR: Please replace DISCORD_WEBHOOK_URL with your actual Discord webhook URL!")
+        return
+
     # Initialize market analysis
     market_analyzer = MarketAnalysis()
     
-    # Symbols to analyze
-    symbols = ['ES=F', '^GSPC', 'AAPL']
+    # Analyze ES Futures and S&P 500
+    symbols = ['ES=F']
     
     # Perform analyses
     analyses = [market_analyzer.analyze_market(symbol) for symbol in symbols]
     
-    # Generate report
-    report = generate_discord_report(analyses)
+    # Generate report with chart
+    report, chart = generate_market_report(analyses)
     
-    # Optional: Send to Discord or print
-    print(report)
-    
-    # Uncomment and replace with your webhook if you want to send to Discord
-    # send_discord_message(webhook_url, report)
+    # Send to Discord
+    send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
 
 if __name__ == "__main__":
     main()
