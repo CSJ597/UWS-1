@@ -7,11 +7,11 @@ import requests
 import io
 from io import BytesIO
 import base64
-import datetime
+from datetime import datetime
 import logging
 import pytz
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -389,53 +389,56 @@ class MarketAnalysis:
             logging.error(f"Failed to send Discord message: {str(e)}")
             raise
 
-def generate_market_report(analyses):
+def generate_market_report(analysis_results):
     """
     Generate a comprehensive market report
     
     Args:
-        analyses (list): List of market analyses
+        analysis_results (list): List of market analyses
     
     Returns:
         tuple: Formatted market report and chart (if available)
     """
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    report = f"""
-📈 UWS Market Update 📉
-📅 {current_date}
-📊 E-Mini S&P 500 Mar 25
-{'─' * 15}
-"""
-    chart = None
-    
-    for analysis in analyses:
-        if 'error' in analysis:
-            report += f"❌ Error: {analysis['error']}\n\n"
-            continue
+    try:
+        # Get the current date
+        current_date = datetime.now().strftime("%Y-%m-%d")
         
-        # Trading Insights
-        volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+        # Create the report header
+        report = f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MARKET ANALYSIS: {current_date}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"""
         
-        # Calculate price position relative to day's range
-        price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+        chart = None
         
-        # Format price position description
-        range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
-        
-        # Calculate change from previous close if available
-        prev_close_info = ""
-        if analysis['prev_close']:
-            change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-            arrow = "📈" if change_from_prev > 0 else "📉"
-            prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
+        for analysis in analysis_results:
+            if 'error' in analysis:
+                report += f"❌ Error: {analysis['error']}\n\n"
+                continue
             
-        # Determine trend emoji
-        trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
-        
-        # Determine momentum emoji
-        momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
-        
-        report += f"""
+            # Trading Insights
+            volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+            
+            # Calculate price position relative to day's range
+            price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+            
+            # Format price position description
+            range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
+            
+            # Calculate change from previous close if available
+            prev_close_info = ""
+            if analysis['prev_close']:
+                change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
+                arrow = "📈" if change_from_prev > 0 else "📉"
+                prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
+                
+            # Determine trend emoji
+            trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
+            
+            # Determine momentum emoji
+            momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
+            
+            report += f"""
 💵 PRICE ACTION
 • Current: **${analysis['current_price']:.2f}** ({range_position})
 • Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
@@ -452,11 +455,11 @@ def generate_market_report(analyses):
 • AI Analysis: {analysis['ai_analysis']}
 {'─' * 15}
 """
-        
-        # Add chart image if present
-        chart = analysis.get('technical_chart', None)
+            
+            # Add chart image if present
+            chart = analysis.get('technical_chart', None)
 
-    return report, chart
+        return report, chart
 
 
 if __name__ == "__main__":
