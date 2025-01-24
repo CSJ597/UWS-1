@@ -9,13 +9,40 @@ from io import BytesIO
 import base64
 import datetime
 import logging
-from bs4 import BeautifulSoup
+import time
+from collections import deque
 import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+
+class RateLimiter:
+    def __init__(self, max_requests, time_window):
+        self.max_requests = max_requests
+        self.time_window = time_window  # in seconds
+        self.requests = deque()
+    
+    def can_make_request(self):
+        now = time.time()
+        
+        # Remove requests older than the time window
+        while self.requests and self.requests[0] < now - self.time_window:
+            self.requests.popleft()
+        
+        # Check if we can make a new request
+        return len(self.requests) < self.max_requests
+    
+    def add_request(self):
+        self.requests.append(time.time())
+    
+    def time_until_next(self):
+        if self.can_make_request():
+            return 0
+        
+        oldest_request = self.requests[0]
+        return int(oldest_request + self.time_window - time.time())
 
 class MarketAnalysis:
     def __init__(self):
@@ -26,6 +53,8 @@ class MarketAnalysis:
         }
         self.allowed_symbols = ['ES=F']
         self.eastern_tz = pytz.timezone('US/Eastern')
+        # Initialize rate limiter (45 requests per hour to stay safe)
+        self.rate_limiter = RateLimiter(max_requests=45, time_window=3600)
     
     def fetch_market_data(self, symbol):
         """
@@ -248,106 +277,146 @@ class MarketAnalysis:
             # Get upcoming high-impact news
             news_events = self.get_high_impact_news()
             
-            # Calculate metrics
-            close_prices = data['Close']
-            returns = close_prices.pct_change()
+            # Calculate metrics and prepare analysis data
+            analysis = self._prepare_analysis_data(data, info, news_events)
             
-            # Get scalar values
-            high_val = data['High'].iloc[0]
-            low_val = data['Low'].iloc[0]
-            price_range = high_val - low_val
-            first_close = data['Close'].iloc[0]
-            last_close = data['Close'].iloc[-1]
-            
-            # Calculate trend
-            close_values = close_prices.values
-            cv = float((np.std(close_values) / np.mean(close_values)) * 100)
-            
-            if cv < 0.3:
-                trend = "RANGING"
-            elif last_close > first_close and price_range > 0:
-                trend = "BULLISH"
-            else:
-                trend = "BEARISH"
-            
-            # Calculate volatility
-            recent_returns = returns.tail(30)
-            returns_values = recent_returns.dropna().values
-            volatility = float(np.std(returns_values) * np.sqrt(252) * 100)
-            
-            # Prepare analysis
-            analysis = {
-                'symbol': 'ES',
-                'current_price': last_close,
-                'daily_change': ((last_close - first_close) / first_close) * 100,
-                'volatility': volatility,
-                'market_trend': trend,
-                'technical_chart': self.generate_technical_chart(data, 'ES'),
-                'session_high': high_val,
-                'session_low': low_val,
-                'prev_close': data['Close'].iloc[-2],
-                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
-                'avg_volume': info.get('averageVolume', None),
-                'description': info.get('shortName', 'E-mini S&P 500 Futures'),
-                'news_events': news_events
-            }
-            
-            # Format market data with more context (shorter version)
-            market_data = f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) | H: ${analysis['session_high']:.2f} L: ${analysis['session_low']:.2f} | {trend}"
+            # Format market data (shorter version)
+            market_data = f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) | H: ${analysis['session_high']:.2f} L: ${analysis['session_low']:.2f} | {analysis['market_trend']}"
             
             # Add critical news only
             if news_events:
                 next_event = news_events[0]
                 market_data += f"\nNews: {next_event['time']} - {next_event['title']}"
             
-            # Get AI analysis with shorter prompt
-            payload = {
-                "model": "gpt-4",
-                "messages": [
-                    {
-                        "role": "system", 
-                        "content": "Analyze ES price action and key levels. Consider market structure and upcoming news. No indicators."
-                    },
-                    {"role": "user", "content": market_data}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 256
-            }
+            # Check rate limit before making API request
+            if not self.rate_limiter.can_make_request():
+                wait_time = self.rate_limiter.time_until_next()
+                logging.warning(f"Rate limit would be exceeded. Using basic analysis. Next API call available in {wait_time} seconds")
+                analysis['analysis'] = self.generate_basic_analysis(analysis)
+                return analysis
             
+            # Try AI analysis
             try:
-                # Make the API request
+                payload = {
+                    "model": "gpt-4",
+                    "messages": [
+                        {
+                            "role": "system", 
+                            "content": "Analyze ES price action and key levels. Consider market structure and upcoming news. No indicators."
+                        },
+                        {"role": "user", "content": market_data}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 256
+                }
+                
                 response = requests.post(
                     'https://api.aimlapi.com/v1/chat/completions',
-                    headers={
-                        'Authorization': f'Bearer 512dc9f0dfe54666b0d98ff42746dd13',
-                        'Content-Type': 'application/json'
-                    },
-                    json=payload
+                    json=payload,
+                    headers={'api-key': 'YOUR-API-KEY'},
+                    timeout=10
                 )
+                
+                # Record this request
+                self.rate_limiter.add_request()
+                
                 logging.info(f"API Response Status Code: {response.status_code}")
                 
-                # Handle successful responses (both 200 and 201)
                 if response.status_code in [200, 201]:
-                    result = response.json()
-                    content = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-                    # Format the analysis with clear sections
-                    ai_analysis = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nMARKET ANALYSIS:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{content}"
-                    logging.info(f"Analysis received: {ai_analysis[:10000]}...")
+                    analysis['analysis'] = response.json()['choices'][0]['message']['content']
                 else:
-                    ai_analysis = '\n\nFailed to retrieve analysis'
-                    logging.error(f"API Error: {response.text}")
+                    error_msg = response.json().get('message', 'Unknown error')
+                    logging.error(f"API Error: {error_msg}")
+                    analysis['analysis'] = self.generate_basic_analysis(analysis)
+                    
             except Exception as e:
-                ai_analysis = f'\n\nFailed to retrieve analysis: {str(e)}'
-                logging.error(f"API Error: {str(e)}")
-
-            # Store the AI analysis result
-            analysis['ai_analysis'] = ai_analysis
+                logging.error(f"API request failed: {str(e)}")
+                analysis['analysis'] = self.generate_basic_analysis(analysis)
             
             return analysis
-
+            
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
             return {'error': str(e)}
+            
+    def _prepare_analysis_data(self, data, info, news_events):
+        """Prepare analysis data from market information"""
+        close_prices = data['Close']
+        returns = close_prices.pct_change()
+        
+        # Get scalar values
+        high_val = data['High'].max()
+        low_val = data['Low'].min()
+        first_close = data['Close'].iloc[0]
+        last_close = data['Close'].iloc[-1]
+        prev_close = data['Close'].iloc[-2] if len(data) > 1 else first_close
+        
+        # Calculate trend
+        close_values = close_prices.values
+        cv = float((np.std(close_values) / np.mean(close_values)) * 100)
+        
+        if cv < 0.3:
+            trend = "RANGING"
+        elif last_close > prev_close:
+            trend = "BULLISH"
+        else:
+            trend = "BEARISH"
+        
+        return {
+            'symbol': 'ES',
+            'current_price': last_close,
+            'daily_change': ((last_close - first_close) / first_close) * 100,
+            'market_trend': trend,
+            'technical_chart': self.generate_technical_chart(data, 'ES'),
+            'session_high': high_val,
+            'session_low': low_val,
+            'prev_close': prev_close,
+            'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
+            'avg_volume': info.get('averageVolume', None),
+            'description': info.get('shortName', 'E-mini S&P 500 Futures'),
+            'news_events': news_events
+        }
+    
+    def generate_basic_analysis(self, analysis):
+        """Generate basic analysis when API is rate limited"""
+        current_price = analysis['current_price']
+        prev_close = analysis['prev_close']
+        high = analysis['session_high']
+        low = analysis['session_low']
+        daily_change = analysis['daily_change']
+        trend = analysis['market_trend']
+        
+        # Calculate price position
+        range_size = high - low
+        if range_size > 0:
+            price_position = (current_price - low) / range_size * 100
+        else:
+            price_position = 50
+            
+        # Generate basic analysis
+        analysis_text = [
+            f"ES Price Action Analysis:",
+            f"Current: ${current_price:.2f} ({daily_change:+.1f}%)",
+            f"Day Range: ${low:.2f} - ${high:.2f}",
+            f"Position in Range: {price_position:.1f}%",
+            f"Market Structure: {trend}",
+        ]
+        
+        # Add momentum analysis
+        if current_price > prev_close:
+            analysis_text.append("Momentum: Positive - Price above previous close")
+        elif current_price < prev_close:
+            analysis_text.append("Momentum: Negative - Price below previous close")
+        else:
+            analysis_text.append("Momentum: Neutral - Price at previous close")
+            
+        # Add news warning if present
+        if analysis.get('news_events'):
+            next_event = analysis['news_events'][0]
+            analysis_text.append(f"\nCAUTION: High Impact News at {next_event['time']}")
+            analysis_text.append(f"Event: {next_event['title']}")
+            
+        return "\n".join(analysis_text)
 
     def send_discord_message(self, webhook_url, content, chart_data=None):
         """Send message to Discord with better formatting and error handling"""
