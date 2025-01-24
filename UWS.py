@@ -190,7 +190,7 @@ class MarketAnalysis:
         first_close = close_prices.iloc[0]
         last_close = close_prices.iloc[-1]
         price_range = last_data['High'].max() - last_data['Low'].min()
-        cv = (np.std(close_prices) / np.mean(close_prices)) * 100
+        cv = float((np.std(close_prices) / np.mean(close_prices)) * 100)  # Ensure cv is a scalar
         if cv < 0.3:
             trend = "RANGING"
         elif last_close > first_close and price_range > 0:
