@@ -18,6 +18,7 @@ import time
 logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
+API_KEY = "32760184b7ce475e942fde2344d49a68"
 
 class MarketAnalysis:
     def __init__(self):
@@ -343,79 +344,75 @@ class MarketAnalysis:
                 'market_news': market_news
             }
             
-            # Format market data with essential info and news warning
-            news_warning = ""
-            if news_events:
-                next_event = min(news_events, key=lambda x: x['minutes_until'])
-                news_warning = f"⚠️ {next_event['impact']} Impact News in {next_event['minutes_until']}m"
-            
-            # Add market news to the prompt
-            news_context = ""
-            news_snippet = ""
-            if market_news:
-                news_snippet = " | ".join([f"{item['snippet']}" for item in market_news[:3]])  # Get snippets of top 3 headlines
-                news_context = f"\nRecent Headlines: {news_snippet}\n"
-            
-            market_data = (
-                f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) "
-                f"H: ${analysis['session_high']:.2f} "
-                f"L: ${analysis['session_low']:.2f} "
-                f"PC: ${analysis['prev_close']:.2f} "
-                f"| {trend} "
-                f"{news_warning}"
-                f"{news_context}"
-            )
-            
-            # Update AI analysis prompt to include news snippets
-            payload = {
-                "model": "gpt-4",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "Analyze ES price action and structure. Include insights from recent news: {news_snippet}. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. No indicators."
-                        ).format(news_snippet=news_snippet)
-                    },
-                    {"role": "user", "content": market_data}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 256
-            }
-            
+            # Get AI analysis with error handling
+            news_snippet = " | ".join([f"{item['snippet']}" for item in market_news[:3]]) if market_news else "No recent headlines"
+            market_data = f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) H: ${analysis['session_high']:.2f} L: ${analysis['session_low']:.2f} PC: ${analysis['prev_close']:.2f} | {trend} ⚠️ {min(news_events, key=lambda x: x['minutes_until'])['impact']} Impact News in {min(news_events, key=lambda x: x['minutes_until'])['minutes_until']}m" if news_events else ""
+            ai_analysis = ""
             try:
-                # Make the API request
+                payload = {
+                    "model": "gpt-4",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Analyze ES price action and structure. Include insights from recent news: {news_snippet}. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. No indicators."
+                            ).format(news_snippet=news_snippet)
+                        },
+                        {"role": "user", "content": market_data}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 256
+                }
+                
                 response = requests.post(
                     'https://api.aimlapi.com/v1/chat/completions',
-                    headers={
-                        'Authorization': f'Bearer 512dc9f0dfe54666b0d98ff42746dd13',
-                        'Content-Type': 'application/json'
-                    },
-                    json=payload
+                    json=payload,
+                    headers={'Authorization': f'Bearer {API_KEY}'}
                 )
+                
                 logging.info(f"API Response Status Code: {response.status_code}")
                 
-                # Handle successful responses (both 200 and 201)
                 if response.status_code in [200, 201]:
-                    result = response.json()
-                    content = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-                    # Format the analysis with clear sections
-                    ai_analysis = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nMARKET ANALYSIS:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{content}"
-                    logging.info(f"Analysis received: {ai_analysis[:10000]}...")
+                    ai_analysis = response.json()['choices'][0]['message']['content'].strip()
+                elif response.status_code == 429:
+                    ai_analysis = "🕒 Rate limit reached. Using price action analysis only:\n\n"
+                    if analysis['daily_change'] > 0:
+                        ai_analysis += f"ES showing strength, up {analysis['daily_change']:.1f}% from previous close. "
+                    else:
+                        ai_analysis += f"ES under pressure, down {abs(analysis['daily_change']):.1f}% from previous close. "
+                    
+                    # Add range analysis
+                    price_in_range = ((analysis['current_price'] - analysis['session_low']) / 
+                                    (analysis['session_high'] - analysis['session_low'])) * 100
+                    if price_in_range > 75:
+                        ai_analysis += "Price trading near session highs, showing bullish control."
+                    elif price_in_range < 25:
+                        ai_analysis += "Price trading near session lows, showing bearish pressure."
+                    else:
+                        ai_analysis += "Price trading in mid-range, showing balanced market conditions."
+                        
+                    logging.warning("API rate limit reached")
                 else:
-                    ai_analysis = '\n\nFailed to retrieve analysis'
+                    error_msg = response.json().get('message', 'Unknown error')
+                    ai_analysis = f"⚠️ Analysis Error: {error_msg}"
                     logging.error(f"API Error: {response.text}")
+                
             except Exception as e:
-                ai_analysis = f'\n\nFailed to retrieve analysis: {str(e)}'
-                logging.error(f"API Error: {str(e)}")
-
-            # Store the AI analysis result
-            analysis['ai_analysis'] = ai_analysis
+                ai_analysis = "⚠️ Analysis Error: Unable to connect to AI service"
+                logging.error(f"Error getting AI analysis: {str(e)}")
+            
+            # Update analysis with AI response and format
+            analysis.update({
+                'ai_analysis': f"\n{ai_analysis}\n",
+                'market_news': market_news,
+                'news_events': news_events
+            })
             
             return analysis
-
+            
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
-            return {'error': str(e)}
+            raise
 
     def send_discord_message(self, webhook_url, message, chart_base64=None):
         """Send a message to Discord with optional chart image"""
