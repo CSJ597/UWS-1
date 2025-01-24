@@ -99,9 +99,6 @@ class InradayMarketAnalysis:
         if len(data) < 30:
             return {"status": "INSUFFICIENT_DATA"}
         
-        # Latest data point
-        latest = data.iloc[-1]
-        
         # Volatility check
         price_std = data['Close'].std()
         avg_price = data['Close'].mean()
@@ -163,8 +160,8 @@ class InradayMarketAnalysis:
         
         # Prepare report
         report = {
-            'symbol': symbol.replace('=F', ''),
-            'current_price': data['Close'].iloc[-1],
+            'symbol': str(symbol).replace('=F', ''),  # Ensure string conversion
+            'current_price': float(data['Close'].iloc[-1]),  # Ensure float
             'signals': scalping_signals
         }
         
@@ -200,22 +197,6 @@ def generate_scalping_discord_message(report):
 """
     return message
 
-def main():
-    # Initialize market analysis
-    market_analyzer = InradayMarketAnalysis()
-    
-    # Analyze ES Futures
-    symbols = ['ES=F']
-    
-    # Generate reports
-    reports = [market_analyzer.generate_scalping_report(symbol) for symbol in symbols]
-    
-    # Prepare Discord messages
-    for report in reports:
-        message = generate_scalping_discord_message(report)
-        send_discord_message(DISCORD_WEBHOOK_URL, message)
-
-# Keeping the original send_discord_message function from the previous script
 def send_discord_message(webhook_url, message, chart_base64=None):
     """
     Send message to Discord webhook with optional image
@@ -246,6 +227,21 @@ def send_discord_message(webhook_url, message, chart_base64=None):
             print("Message sent successfully to Discord!")
         except Exception as e:
             print(f"Error sending message to Discord: {e}")
+
+def main():
+    # Initialize market analysis
+    market_analyzer = InradayMarketAnalysis()
+    
+    # Analyze ES Futures
+    symbols = ['ES=F']
+    
+    # Generate reports
+    reports = [market_analyzer.generate_scalping_report(symbol) for symbol in symbols]
+    
+    # Prepare Discord messages
+    for report in reports:
+        message = generate_scalping_discord_message(report)
+        send_discord_message(DISCORD_WEBHOOK_URL, message)
 
 if __name__ == "__main__":
     main()
