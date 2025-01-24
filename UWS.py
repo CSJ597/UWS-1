@@ -220,7 +220,21 @@ class MarketAnalysis:
         
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
-        analysis_response = requests.post('https://api.aimlapi.com/short_analysis', json={'data': analysis, 'model': 'DeepSeek LLM Chat (67B)', 'additional_info': 'Provide any necessary context here'}, headers={'Authorization': f'Bearer {api_key}'})
+        payload = {
+            "prompt": "Analyze the market trend and provide insights.",
+            "input": analysis,
+            "model": "DeepSeek LLM Chat (67B)",
+            "max_tokens": 2048,
+            "temperature": 0.7,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0
+        }
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        analysis_response = requests.post('https://api.aimlapi.com/v1/short_analysis', json=payload, headers=headers)
         logging.info(f"API Response Status Code: {analysis_response.status_code}")
         logging.info(f"API Response: {analysis_response.text}")
         if analysis_response.status_code == 200:
