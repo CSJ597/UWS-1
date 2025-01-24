@@ -2,21 +2,18 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    # Run at exactly 9:32:00 AM EST (14:32:00 UTC) on weekdays
-    - cron: '49 14 * * 1-5'
-  push:
-    branches: [ main ]  # Trigger on push to main branch
+    # Run at exactly 9:55:00 AM EST (14:55:00 UTC) on weekdays
+    - cron: '55 14 * * 1-5'
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Type of run (one-time override)'
+        description: 'Run now (schedule will continue at 9:55 AM EST)'
         required: true
-        default: 'auto'
+        default: 'discord'
         type: choice
         options:
-          - auto
-          - manual
-          - test
+          - discord
+          - print
 
 permissions:
   contents: read
@@ -64,21 +61,20 @@ jobs:
         
         echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
         
-        # Handle the current run based on trigger type
-        if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.run_type }}" = "auto" ]; then
-          # Scheduled or auto run
-          echo "Running auto analysis..."
+        if [ "${{ github.event_name }}" = "schedule" ]; then
+          # Scheduled automatic run at 9:55 AM EST
+          echo "Running scheduled analysis..."
           python UWS.py --auto
-        elif [ "${{ github.event.inputs.run_type }}" = "test" ]; then
-          # Test run - print to console
-          echo "Running test analysis (one-time override)..."
+        elif [ "${{ github.event.inputs.run_type }}" = "print" ]; then
+          # Manual run - print to console
+          echo "Running manual analysis (print to console)..."
           python UWS.py --print
-          echo "Note: Next run will revert to auto mode"
+          echo "Note: Automatic schedule will continue at 9:55 AM EST"
         else
           # Manual run - send to Discord
-          echo "Running manual analysis (one-time override)..."
+          echo "Running manual analysis (send to Discord)..."
           python UWS.py --discord
-          echo "Note: Next run will revert to auto mode"
+          echo "Note: Automatic schedule will continue at 9:55 AM EST"
         fi
         
         echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
