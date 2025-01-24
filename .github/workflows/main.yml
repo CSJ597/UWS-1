@@ -2,42 +2,35 @@ name: Daily UWS Analysis
 
 on:
   schedule:
-    # This cron expression runs at 11:47 AM EST (16:47 UTC) every day
-    - cron: '52 16 * * *'
+    # This cron expression runs at 11:47 AM EST (16:47 UTC) every weekday
+    - cron: '55 16 * * 1-5'
 
 permissions:
   contents: read
   actions: write
 
 jobs:
-  # Job for scheduled runs
-  scheduled-run:
-    if: github.event_name == 'schedule'
+  run-uws:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-    - name: Debug Info
-      run: |
-        echo "SCHEDULED RUN"
-        echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-    
     - name: Checkout repository
       uses: actions/checkout@v3
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
-        
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install yfinance numpy pandas matplotlib seaborn requests
-        
-    - name: Run scheduled analysis
+
+    - name: Run UWS Analysis
       env:
         DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
       run: |
-        echo "Starting SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-        python UWS.py --auto
-        echo "Finished SCHEDULED market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
+        echo "Starting UWS analysis at $(date +'%Y-%m-%d %H:%M:%S %Z')"
+        python UWS.py --auto  # Adjust this command as needed for your script
+        echo "Finished UWS analysis at $(date +'%Y-%m-%d %H:%M:%S %Z')"
