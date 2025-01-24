@@ -246,11 +246,46 @@ class MarketAnalysis:
             logging.error(f"Error checking news: {str(e)}")
             return []
             
+    def get_marketwatch_news(self):
+        """Scrape recent news from MarketWatch"""
+        try:
+            url = 'https://www.marketwatch.com/markets'
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            news_items = []
+            article_elements = soup.find_all('div', class_='article__content')
+            
+            for article in article_elements[:5]:  # Get latest 5 news items
+                title_elem = article.find('h3', class_='article__headline')
+                time_elem = article.find('span', class_='article__timestamp')
+                
+                if title_elem and time_elem:
+                    title = title_elem.text.strip()
+                    timestamp = time_elem.text.strip()
+                    
+                    news_items.append({
+                        'title': title,
+                        'time': timestamp
+                    })
+            
+            return news_items
+            
+        except Exception as e:
+            logging.error(f"Error fetching MarketWatch news: {str(e)}")
+            return []
+
     def analyze_market(self, symbol='ES=F'):
         """Comprehensive market analysis"""
         try:
             # Check for high impact news
             news_events = self.check_high_impact_news()
+            
+            # Get MarketWatch news
+            market_news = self.get_marketwatch_news()
             
             # Get data
             ticker = yf.Ticker(symbol)
@@ -301,7 +336,8 @@ class MarketAnalysis:
                 'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
                 'avg_volume': info.get('averageVolume', None),
                 'description': info.get('shortName', 'E-mini S&P 500 Futures'),
-                'news_events': news_events
+                'news_events': news_events,
+                'market_news': market_news
             }
             
             # Format market data with essential info and news warning
@@ -310,6 +346,12 @@ class MarketAnalysis:
                 next_event = min(news_events, key=lambda x: x['minutes_until'])
                 news_warning = f"⚠️ {next_event['impact']} Impact News in {next_event['minutes_until']}m"
             
+            # Add market news to the prompt
+            news_context = ""
+            if market_news:
+                news_snippet = " | ".join([f"{item['title']}" for item in market_news[:3]])  # Get titles of top 3 headlines
+                news_context = f"\nRecent Headlines: {news_snippet}\n"
+            
             market_data = (
                 f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) "
                 f"H: ${analysis['session_high']:.2f} "
@@ -317,15 +359,18 @@ class MarketAnalysis:
                 f"PC: ${analysis['prev_close']:.2f} "
                 f"| {trend} "
                 f"{news_warning}"
+                f"{news_context}"
             )
             
-            # Get AI analysis with concise prompt
+            # Update AI analysis prompt to include news snippets
             payload = {
                 "model": "gpt-4",
                 "messages": [
                     {
-                        "role": "system", 
-                        "content": "Analyze ES price action and structure. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. No indicators."
+                        "role": "system",
+                        "content": (
+                            "Analyze ES price action and structure. Include insights from recent news: {news_snippet}. Focus on: 1) Price vs levels 2) Momentum 3) Market phase 4) Bias. No indicators."
+                        ).format(news_snippet=news_snippet)
                     },
                     {"role": "user", "content": market_data}
                 ],
@@ -440,12 +485,19 @@ MARKET ANALYSIS: {current_date}
             momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
             
             # Format news events
-            news_section = ""
+            news_section = "\n📰 UPCOMING NEWS\n"
             if analysis.get('news_events'):
-                news_section = "\n📰 UPCOMING NEWS\n"
                 for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
                     impact_emoji = "🔴" if event['impact'] == "High" else "🟠"
                     news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
+            else:
+                news_section += "• 📆 No high-impact news events in next 30 minutes\n"
+            
+            # Add recent market headlines
+            if analysis.get('market_news'):
+                news_section += "\n📰 RECENT HEADLINES\n"
+                for news in analysis['market_news'][:3]:  # Show top 3 headlines
+                    news_section += f"• 📄 {news['title']} ({news['time']})\n"
             
             report += f"""
 💵 PRICE ACTION
