@@ -96,10 +96,25 @@ class MarketAnalysis:
 
         # Generate analysis results
         try:
+            close_prices = data['Close']
+            first_close = close_prices.iloc[0]
+            last_close = close_prices.iloc[-1]
+            price_range = data['High'].max() - data['Low'].min()
+            cv = (np.std(close_prices) / np.mean(close_prices)) * 100
+            cv = float(cv)  # Ensure cv is a scalar
+            if cv < 0.3:
+                market_trend = "RANGING"
+            elif last_close > first_close and price_range > 0:
+                market_trend = "BULLISH TREND"
+            elif last_close < first_close and price_range > 0:
+                market_trend = "BEARISH TREND"
+            else:
+                market_trend = "RANGING"
+
             analysis = {
                 'symbol': 'ES',
                 'current_price': data['Close'].iloc[-1].item(),
-                'market_trend': "BULLISH" if data['Close'].iloc[-1] > data['Close'].iloc[0] else "BEARISH",
+                'market_trend': market_trend,
                 'technical_chart': self.generate_technical_chart(data, 'ES')
             }
         except Exception as e:
