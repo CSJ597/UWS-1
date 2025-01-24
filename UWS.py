@@ -9,6 +9,9 @@ from io import BytesIO
 import base64
 import datetime
 import logging
+import pytz
+from bs4 import BeautifulSoup
+from datetime import datetime, timedelta
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +26,8 @@ class MarketAnalysis:
             'interval': '1m',  # 1-minute granularity for scalping.
         }
         self.allowed_symbols = ['ES=F']
-
+        self.eastern_tz = pytz.timezone('US/Eastern')
+    
     def fetch_market_data(self, symbol):
         """
         Fetch comprehensive market data with error handling
@@ -170,9 +174,83 @@ class MarketAnalysis:
                 transform=ax.transAxes, color='white',
                 fontsize=12, fontweight='bold')
 
+    def check_high_impact_news(self):
+        """Check ForexFactory for high-impact news events"""
+        try:
+            # Get current time in ET
+            now = datetime.now(self.eastern_tz)
+            
+            # Format today's date for URL
+            date_str = now.strftime('%Y%m%d')
+            url = f'https://www.forexfactory.com/calendar?day={date_str}'
+            
+            # Get the page
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find all news events
+            events = soup.find_all('tr', class_='calendar__row')
+            
+            high_impact_events = []
+            for event in events:
+                # Check if it's a high impact event (red or orange folder)
+                impact = event.find('div', class_='calendar__impact-icon')
+                if not impact:
+                    continue
+                    
+                impact_class = impact.get('class', [])
+                if not any('high' in c or 'medium' in c for c in impact_class):
+                    continue
+                
+                # Get event time
+                time_elem = event.find('td', class_='calendar__time')
+                if not time_elem:
+                    continue
+                    
+                time_str = time_elem.text.strip()
+                if not time_str or time_str == "All Day":
+                    continue
+                
+                # Parse event time
+                try:
+                    event_time = datetime.strptime(time_str, '%I:%M%p').time()
+                    event_datetime = datetime.combine(now.date(), event_time)
+                    event_datetime = self.eastern_tz.localize(event_datetime)
+                    
+                    # Only include events within next 30 minutes
+                    time_until_event = (event_datetime - now).total_seconds() / 60
+                    if 0 <= time_until_event <= 30:
+                        # Get event details
+                        currency = event.find('td', class_='calendar__currency').text.strip()
+                        title = event.find('span', class_='calendar__event-title').text.strip()
+                        
+                        impact_level = 'High' if 'high' in ' '.join(impact_class) else 'Medium'
+                        
+                        high_impact_events.append({
+                            'time': event_time.strftime('%I:%M %p'),
+                            'currency': currency,
+                            'event': title,
+                            'impact': impact_level,
+                            'minutes_until': int(time_until_event)
+                        })
+                except ValueError:
+                    continue
+            
+            return high_impact_events
+            
+        except Exception as e:
+            logging.error(f"Error checking news: {str(e)}")
+            return []
+            
     def analyze_market(self, symbol='ES=F'):
         """Comprehensive market analysis"""
         try:
+            # Check for high impact news
+            news_events = self.check_high_impact_news()
+            
             # Get data
             ticker = yf.Ticker(symbol)
             data = ticker.history(period="1d", interval="1m")
@@ -221,16 +299,23 @@ class MarketAnalysis:
                 'prev_close': data['Close'].iloc[-2],
                 'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
                 'avg_volume': info.get('averageVolume', None),
-                'description': info.get('shortName', 'E-mini S&P 500 Futures')
+                'description': info.get('shortName', 'E-mini S&P 500 Futures'),
+                'news_events': news_events
             }
             
-            # Format market data with essential info
+            # Format market data with essential info and news warning
+            news_warning = ""
+            if news_events:
+                next_event = min(news_events, key=lambda x: x['minutes_until'])
+                news_warning = f"⚠️ {next_event['impact']} Impact News in {next_event['minutes_until']}m"
+            
             market_data = (
                 f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) "
                 f"H: ${analysis['session_high']:.2f} "
                 f"L: ${analysis['session_low']:.2f} "
                 f"PC: ${analysis['prev_close']:.2f} "
-                f"| {trend}"
+                f"| {trend} "
+                f"{news_warning}"
             )
             
             # Get AI analysis with concise prompt
