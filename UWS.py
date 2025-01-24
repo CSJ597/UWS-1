@@ -65,17 +65,15 @@ class ScalpingAnalysis:
         
         # Volatility calculation
         returns = close_prices.pct_change()
-        volatility = {
-            'historical_volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
-            'current_daily_change': float(returns.iloc[-1]) * 100
-        }
+        
+        # Safely extract scalar values
+        current_price = float(close_prices.iloc[-1])
+        historical_volatility = float(np.std(returns.dropna()) * np.sqrt(252) * 100)
+        current_daily_change = float(returns.iloc[-1] * 100)
         
         # Technical indicators
         macd = self._custom_macd(close_prices)
         rsi = self._custom_rsi(close_prices)
-        
-        # Ensure we have a valid current price and all metrics
-        current_price = close_prices.iloc[-1]
         
         # Compile comprehensive analysis
         analysis = f"""🎯 Advanced Scalping Preparation Guide 📊
@@ -86,8 +84,8 @@ class ScalpingAnalysis:
 - Current Price: ${current_price:.2f}
 
 📈 MARKET METRICS:
-- Historical Volatility: {volatility['historical_volatility']:.2f}%
-- Daily Price Change: {volatility['current_daily_change']:.2f}%
+- Historical Volatility: {historical_volatility:.2f}%
+- Daily Price Change: {current_daily_change:.2f}%
 
 🚀 TECHNICAL INDICATORS:
 - MACD Line: {macd['macd_line']:.4f}
@@ -96,7 +94,10 @@ class ScalpingAnalysis:
 - RSI: {rsi:.2f}
 
 💡 SCALPING INSIGHTS:
-{self._generate_scalping_insights(macd, rsi, volatility)}
+{self._generate_scalping_insights(macd, rsi, {
+    'historical_volatility': historical_volatility, 
+    'current_daily_change': current_daily_change
+})}
 """
         return analysis
 
