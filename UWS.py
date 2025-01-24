@@ -9,8 +9,6 @@ from io import BytesIO
 import base64
 import datetime
 import logging
-import time
-from collections import deque
 from bs4 import BeautifulSoup
 import pytz
 
@@ -18,32 +16,6 @@ import pytz
 logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-
-class RateLimiter:
-    def __init__(self, max_requests, time_window):
-        self.max_requests = max_requests
-        self.time_window = time_window  # in seconds
-        self.requests = deque()
-    
-    def can_make_request(self):
-        now = time.time()
-        
-        # Remove requests older than the time window
-        while self.requests and self.requests[0] < now - self.time_window:
-            self.requests.popleft()
-        
-        # Check if we can make a new request
-        return len(self.requests) < self.max_requests
-    
-    def add_request(self):
-        self.requests.append(time.time())
-    
-    def time_until_next(self):
-        if self.can_make_request():
-            return 0
-        
-        oldest_request = self.requests[0]
-        return int(oldest_request + self.time_window - time.time())
 
 class MarketAnalysis:
     def __init__(self):
@@ -54,8 +26,6 @@ class MarketAnalysis:
         }
         self.allowed_symbols = ['ES=F']
         self.eastern_tz = pytz.timezone('US/Eastern')
-        # Initialize rate limiter (45 requests per hour to stay safe)
-        self.rate_limiter = RateLimiter(max_requests=45, time_window=3600)
     
     def fetch_market_data(self, symbol):
         """
@@ -289,14 +259,7 @@ class MarketAnalysis:
                 next_event = news_events[0]
                 market_data += f"\nNews: {next_event['time']} - {next_event['title']}"
             
-            # Check rate limit before making API request
-            if not self.rate_limiter.can_make_request():
-                wait_time = self.rate_limiter.time_until_next()
-                logging.warning(f"Rate limit would be exceeded. Using basic analysis. Next API call available in {wait_time} seconds")
-                analysis['analysis'] = self.generate_basic_analysis(analysis)
-                return analysis
-            
-            # Try AI analysis
+            # Try AI analysis first
             try:
                 payload = {
                     "model": "gpt-4",
@@ -318,13 +281,13 @@ class MarketAnalysis:
                     timeout=10
                 )
                 
-                # Record this request
-                self.rate_limiter.add_request()
-                
                 logging.info(f"API Response Status Code: {response.status_code}")
                 
                 if response.status_code in [200, 201]:
                     analysis['analysis'] = response.json()['choices'][0]['message']['content']
+                elif response.status_code == 429:  # Rate limit reached
+                    logging.warning("API rate limit reached, using basic analysis")
+                    analysis['analysis'] = self.generate_basic_analysis(analysis)
                 else:
                     error_msg = response.json().get('message', 'Unknown error')
                     logging.error(f"API Error: {error_msg}")
@@ -363,9 +326,6 @@ class MarketAnalysis:
         else:
             trend = "BEARISH"
         
-        # Calculate volatility
-        volatility = np.std(returns) * np.sqrt(252)
-        
         return {
             'symbol': 'ES',
             'current_price': last_close,
@@ -378,8 +338,7 @@ class MarketAnalysis:
             'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
             'avg_volume': info.get('averageVolume', None),
             'description': info.get('shortName', 'E-mini S&P 500 Futures'),
-            'news_events': news_events,
-            'volatility': volatility
+            'news_events': news_events
         }
     
     def generate_basic_analysis(self, analysis):
@@ -488,47 +447,74 @@ class MarketAnalysis:
             logging.error(f"Unexpected error sending Discord message: {e}")
 
 def generate_market_report(analyses):
-    """Generate a comprehensive market report from analyses"""
-    try:
-        report = []
-        chart = None
+    """
+    Generate a comprehensive market report
+    
+    Args:
+        analyses (list): List of market analyses
+    
+    Returns:
+        tuple: Formatted market report and chart (if available)
+    """
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    report = f"""
+📈 UWS Market Update 📉
+📅 {current_date}
+📊 E-Mini S&P 500 Mar 25
+{'─' * 15}
+"""
+    chart = None
+    
+    for analysis in analyses:
+        if 'error' in analysis:
+            report += f"❌ Error: {analysis['error']}\n\n"
+            continue
         
-        for analysis in analyses:
-            if 'error' in analysis:
-                report.append(f"Error: {analysis['error']}")
-                continue
-                
-            # Extract the AI or basic analysis
-            market_analysis = analysis.get('analysis', 'No analysis available')
-            
-            # Calculate recent volatility
-            if 'current_price' in analysis:
-                report.append(
-                    f"ES Analysis Report\n"
-                    f"Price: ${analysis['current_price']:.2f} ({analysis['daily_change']:+.1f}%)\n"
-                    f"Day Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}\n"
-                    f"Market Structure: {analysis['market_trend']}\n"
-                )
-                
-                # Add news events if present
-                if analysis.get('news_events'):
-                    report.append("\nHigh Impact News:")
-                    for event in analysis['news_events']:
-                        report.append(f"{event['time']} - {event['title']}")
-                
-                # Add the detailed analysis
-                report.append("\nAnalysis:")
-                report.append(market_analysis)
-                
-                # Get the chart if available
-                if 'technical_chart' in analysis:
-                    chart = analysis['technical_chart']
-            
-        return "\n".join(report), chart
+        # Trading Insights
+        volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
         
-    except Exception as e:
-        logging.error(f"Error generating report: {e}")
-        return f"Error generating report: {str(e)}", None
+        # Calculate price position relative to day's range
+        price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+        
+        # Format price position description
+        range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
+        
+        # Calculate change from previous close if available
+        prev_close_info = ""
+        if analysis['prev_close']:
+            change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
+            arrow = "📈" if change_from_prev > 0 else "📉"
+            prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
+            
+        # Determine trend emoji
+        trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
+        
+        # Determine momentum emoji
+        momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
+        
+        report += f"""
+💵 PRICE ACTION
+• Current: **${analysis['current_price']:.2f}** ({range_position})
+• Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
+• Today's Move: **{analysis['daily_change']:+.2f}%** 
+{prev_close_info}
+📊 TECHNICAL SNAPSHOT
+• Market Trend: {trend_emoji} **{analysis['market_trend']}**
+• Volatility: 🌪️ **{analysis['volatility']:.2f}%** ({volatility_status})
+• Range Position: 📍 **{price_position:.1f}%**
+
+🎯 TRADING SIGNALS
+• Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
+• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Calm'} 
+• AI Analysis: {analysis['ai_analysis']}
+{'─' * 15}
+"""
+        
+        # Add chart image if present
+        chart = analysis.get('technical_chart', None)
+
+    return report, chart
+
 
 if __name__ == "__main__":
     analyzer = MarketAnalysis()
