@@ -211,15 +211,22 @@ class MarketAnalysis:
                 'session_high': float(last_data['High'].iloc[0]),
                 'session_low': float(last_data['Low'].iloc[0]),
                 'prev_close': prev_close,
-                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data else None,
+                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
                 'avg_volume': info.get('averageVolume', None),
                 'description': info.get('shortName', 'E-mini S&P 500 Futures')
             }
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
         
-        # Prepare market data for analysis
-        market_data = f"Current Price: {analysis['current_price']}, Daily Change: {analysis['daily_change']}, Volatility: {analysis['volatility']}, Market Trend: {analysis['market_trend']}, Session High: {analysis['session_high']}, Session Low: {analysis['session_low']}, Previous Close: {analysis['prev_close']}, Volume: {analysis['volume']}, Average Volume: {analysis['avg_volume']}"
+        # Prepare market data for analysis with shorter format
+        market_data = (
+            f"Price: ${analysis['current_price']:.2f}, "
+            f"Change: {analysis['daily_change']:.1f}%, "
+            f"Vol: {analysis['volatility']:.1f}%, "
+            f"Trend: {analysis['market_trend']}, "
+            f"H: ${analysis['session_high']:.2f}, "
+            f"L: ${analysis['session_low']:.2f}"
+        )
         
         # Prepare the API request
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
@@ -231,8 +238,8 @@ class MarketAnalysis:
         payload = {
             "model": "deepseek-ai/deepseek-llm-67b-chat",
             "messages": [
-                {"role": "system", "content": "You are a professional market analyst. Analyze the given market data and provide detailed insights about the market trends, volatility, and potential outlook."},
-                {"role": "user", "content": f"Please analyze this market data and provide insights: {market_data}"}
+                {"role": "system", "content": "You are a market analyst. Provide brief insights about the market data."},
+                {"role": "user", "content": f"Analyze: {market_data}"}
             ],
             "temperature": 0.7,
             "max_tokens": 256
