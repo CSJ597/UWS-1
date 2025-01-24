@@ -8,253 +8,321 @@ from io import BytesIO
 import base64
 import datetime
 import logging
-import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 
-class ScalpingAnalyzer:
+class MarketAnalysis:
     def __init__(self):
-        self.config = {
-            'interval': '1m',
-            'rth_start': datetime.time(9, 30),
-            'rth_end': datetime.time(16, 15),
-            'bollinger_period': 10,
-            'bollinger_std': 1.5,
-            'rsi_period': 14,
-            'volume_spike_window': (5, 30)
+        """Initialize analysis with default configurations"""
+        self.analysis_config = {
+            'period': '1d',  # Change back to 1 day for valid data fetching.
+            'interval': '1m',  # 1-minute granularity for scalping.
         }
-        self.symbol = 'ES=F'
-        self.tz = pytz.timezone('US/Eastern')
+        self.allowed_symbols = ['ES=F']
 
-    def fetch_market_data(self):
-        """Fetch and filter Regular Trading Hours data"""
+    def fetch_market_data(self, symbol):
+        """
+        Fetch comprehensive market data with error handling
+        
+        Args:
+            symbol (str): Stock/futures symbol to analyze
+        
+        Returns:
+            tuple: (market data DataFrame, error message or None)
+        """
+        if symbol not in self.allowed_symbols:
+            return None, f"Symbol {symbol} not allowed. Only ES Futures are permitted."
+        
         try:
+            # Fetch detailed market data
             data = yf.download(
-                self.symbol,
-                period='1d',
-                interval=self.config['interval'],
-                prepost=False
-            ).tz_convert(self.tz)
+                symbol, 
+                period=self.analysis_config['period'], 
+                interval=self.analysis_config['interval']
+            )
             
-            # Filter RTH data
-            rth_mask = (data.index.time >= self.config['rth_start']) & \
-                      (data.index.time <= self.config['rth_end'])
-            data_rth = data[rth_mask]
+            # Validate data
+            if data.empty:
+                return None, f"No data available for {symbol}"
             
-            if data_rth.empty:
-                return data, "No RTH data available, using full session"
-            
-            return data_rth, None
+            return data, None
         
         except Exception as e:
-            return None, f"Data fetch error: {str(e)}"
+            return None, f"Data fetch error for {symbol}: {str(e)}"
 
-    def calculate_indicators(self, data):
-        """Calculate technical indicators for scalping"""
-        if len(data) < 20:
-            return {}, "Insufficient data for indicators"
-            
+    def identify_market_trend(self, data):
+        """
+        Identify market trend (Trending or Ranging)
+        
+        Args:
+            data (pd.DataFrame): Market price data
+        
+        Returns:
+            str: Market trend classification
+        """
+        if len(data) < 2:
+            return "INSUFFICIENT DATA"
+        
         try:
-            # Bollinger Bands
-            close = data['Close']
-            ma = close.rolling(self.config['bollinger_period']).mean()
-            std = close.rolling(self.config['bollinger_period']).std()
-            upper = ma + std * self.config['bollinger_std']
-            lower = ma - std * self.config['bollinger_std']
+            # Calculate price range and standard deviation
+            price_range = float(data['High'].max() - data['Low'].min())
             
-            # RSI
-            delta = close.diff()
-            gain = delta.where(delta > 0, 0)
-            loss = -delta.where(delta < 0, 0)
-            avg_gain = gain.ewm(alpha=1/self.config['rsi_period'], adjust=False).mean()
-            avg_loss = loss.ewm(alpha=1/self.config['rsi_period'], adjust=False).mean()
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
+            # Use .item() to convert Series to scalar
+            avg_price = float(data['Close'].mean().item())
             
-            # VWAP
-            tp = (data['High'] + data['Low'] + data['Close']) / 3
-            cumulative_tpv = (tp * data['Volume']).cumsum()
-            cumulative_vol = data['Volume'].cumsum()
-            vwap = cumulative_tpv / cumulative_vol
+            # Prevent division by zero
+            if avg_price == 0:
+                return "UNDEFINED"
             
-            return {
-                'upper_band': upper,
-                'lower_band': lower,
-                'rsi': rsi,
-                'vwap': vwap,
-                'ma': ma
-            }, None
+            # Calculate standard deviation
+            price_std = float(data['Close'].std().item())
+            
+            # Coefficient of variation to assess trend
+            cv = (price_std / avg_price) * 100
+            
+            # Trend classification logic
+            first_close = float(data['Close'].iloc[0])
+            last_close = float(data['Close'].iloc[-1])
+            
+            if cv < 0.3:
+                return "RANGING"
+            elif last_close > first_close and price_range > 0:
+                return "BULLISH TREND"
+            elif last_close < first_close and price_range > 0:
+                return "BEARISH TREND"
+            else:
+                return "RANGING"
         
         except Exception as e:
-            return {}, f"Indicator error: {str(e)}"
+            return f"TREND ANALYSIS ERROR: {str(e)}"
 
-    def analyze_price_action(self, data, indicators):
-        """Generate scalping signals"""
-        if data.empty:
-            return {}
-            
-        current_price = data['Close'].iloc[-1]
-        vwap = indicators['vwap'].iloc[-1] if 'vwap' in indicators else None
-        rsi = indicators['rsi'].iloc[-1] if 'rsi' in indicators else None
-        
-        signals = {
-            'price_vwap': 'Above' if current_price > vwap else 'Below' if vwap else None,
-            'rsi_status': self._get_rsi_status(rsi),
-            'bollinger_squeeze': self._detect_squeeze(indicators),
-            'volume_spike': self._detect_volume_spike(data),
-            'trend': self._detect_trend(data, indicators)
-        }
-        
-        return signals
-
-    def _get_rsi_status(self, rsi):
-        if not rsi:
-            return None
-        if rsi > 70:
-            return 'Overbought'
-        if rsi < 30:
-            return 'Oversold'
-        return 'Neutral'
-
-    def _detect_squeeze(self, indicators):
-        if 'upper_band' not in indicators:
-            return False
-        recent_band_width = (indicators['upper_band'].iloc[-5:] - 
-                            indicators['lower_band'].iloc[-5:]).mean()
-        return recent_band_width < np.mean(indicators['upper_band'] - indicators['lower_band']) * 0.5
-
-    def _detect_volume_spike(self, data):
-        vol_window, vol_avg_window = self.config['volume_spike_window']
-        recent_vol = data['Volume'].iloc[-vol_window:].mean()
-        avg_vol = data['Volume'].iloc[-vol_avg_window:].mean()
-        return recent_vol > avg_vol * 2 if avg_vol > 0 else False
-
-    def _detect_trend(self, data, indicators):
-        if len(data) < 3:
-            return 'Neutral'
-        price_change = data['Close'].iloc[-1] - data['Close'].iloc[-3]
-        if price_change > 0 and data['Close'].iloc[-1] > indicators['ma'].iloc[-1]:
-            return 'Bullish'
-        if price_change < 0 and data['Close'].iloc[-1] < indicators['ma'].iloc[-1]:
-            return 'Bearish'
-        return 'Neutral'
-
-    def generate_report(self, data, indicators, signals):
-        """Generate formatted trading report"""
-        current_time = datetime.datetime.now(self.tz).strftime("%H:%M:%S")
-        current_price = data['Close'].iloc[-1]
-        session_high = data['High'].max()
-        session_low = data['Low'].min()
-        
-        report = f"""
-⚡ **UWS Scalping Alert** ⚡
-🕒 {current_time} EST | 📈 ES Futures
-
-💵 **Price Action**
-- Current: ${current_price:.2f}
-- Session Range: ${session_low:.2f} - ${session_high:.2f}
-- VWAP Position: {signals['price_vwap'] or 'N/A'}
-
-📊 **Technical Signals**
-- RSI: {indicators['rsi'].iloc[-1]:.1f} ({signals['rsi_status'] or 'N/A'})
-- Trend: {signals['trend']}
-- Bollinger Squeeze: {'🔔 Active' if signals['bollinger_squeeze'] else '✅ Normal'}
-- Volume Spike: {'🚨 Detected' if signals['volume_spike'] else 'Normal'}
-
-🎯 **Key Levels**
-- Upper BB: ${indicators['upper_band'].iloc[-1]:.2f}
-- Lower BB: ${indicators['lower_band'].iloc[-1]:.2f}
-- VWAP: ${indicators['vwap'].iloc[-1]:.2f if indicators['vwap'].any() else 'N/A'}
-"""
-
-        return report
-
-    def create_chart(self, data, indicators):
-        """Create enhanced technical chart"""
-        plt.figure(figsize=(12, 8), facecolor="#1E1E1E")
-        ax1 = plt.subplot2grid((6, 1), (0, 0), rowspan=4, colspan=1)
-        ax2 = plt.subplot2grid((6, 1), (4, 0), rowspan=2, colspan=1, sharex=ax1)
+    def generate_technical_chart(self, data, symbol):
+        """Generate a comprehensive technical analysis chart"""
+        plt.figure(figsize=(12, 8), facecolor="#a3c1ad")  # Set the facecolor here
 
         # Price and Bollinger Bands
-        ax1.plot(data.index, data['Close'], label='Price', color='#00FF00', linewidth=1)
-        ax1.plot(data.index, indicators['upper_band'], label='Upper BB', color='#FF0000', linestyle='--')
-        ax1.plot(data.index, indicators['lower_band'], label='Lower BB', color='#0000FF', linestyle='--')
-        ax1.plot(data.index, indicators['vwap'], label='VWAP', color='#FFA500')
-        ax1.fill_between(data.index, indicators['lower_band'], indicators['upper_band'], color='#2A2A2A')
-
-        # RSI
-        ax2.plot(data.index, indicators['rsi'], label='RSI', color='#00FFFF')
-        ax2.axhline(70, color='#FF0000', linestyle='--')
-        ax2.axhline(30, color='#00FF00', linestyle='--')
-
-        # Formatting
-        ax1.set_title('ES Futures Scalping Dashboard', color='white', fontsize=14)
-        ax1.legend(loc='upper left', fontsize=8)
-        ax2.set_ylabel('RSI', color='white')
-        ax1.set_facecolor('#1E1E1E')
-        ax2.set_facecolor('#1E1E1E')
+        close_prices = data['Close']
+        window = min(20, len(close_prices))  # Adjust window size if data is less
         
-        for ax in [ax1, ax2]:
-            ax.tick_params(colors='white')
-            ax.yaxis.label.set_color('white')
-            ax.xaxis.label.set_color('white')
-            ax.grid(color='#404040')
+        middle_band = close_prices.rolling(window=window).mean()
+        std_dev = close_prices.rolling(window=window).std()
+        upper_band = middle_band + (std_dev * 2)
+        lower_band = middle_band - (std_dev * 2)
 
-        buf = BytesIO()
-        plt.savefig(buf, format='png', facecolor='#1E1E1E', bbox_inches='tight')
+        # Convert index to EST timezone
+        est_index = data.index.tz_convert('US/Eastern')
+
+        # Plot with white line for the price
+        plt.plot(est_index, close_prices, label='Close Price', color='white', linewidth=1.5)
+        plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
+        plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
+
+        plt.title('Underground Wall Street\nE-Mini S&P 500 TA', pad=20, color='white')
+        plt.xlabel('Time (EST)', color='white')
+        plt.ylabel('Price', color='white')
+        plt.legend(facecolor='none', edgecolor='none', fontsize='small', loc='upper left')
+        plt.grid(True, color='white')  # Set grid color to white
+
+        # Save plot to buffer with matching facecolor
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png', bbox_inches='tight', facecolor="#a3c1ad", transparent=True)  # Ensure facecolor matches
         plt.close()
-        return base64.b64encode(buf.getvalue()).decode('utf-8')
 
-    def run_analysis(self):
-        """Main analysis workflow"""
-        data, data_error = self.fetch_market_data()
+        # Encode image to base64
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    def analyze_market(self, symbol='ES=F'):
+        """
+        Comprehensive market analysis
+        
+        Args:
+            symbol (str): Stock/futures symbol to analyze
+        
+        Returns:
+            dict: Comprehensive market analysis results
+        """
+        # Fetch market data
+        data, data_error = self.fetch_market_data(symbol)
         if data_error:
             return {'error': data_error}
-            
-        indicators, indicator_error = self.calculate_indicators(data)
-        if indicator_error:
-            return {'error': indicator_error}
-            
-        signals = self.analyze_price_action(data, indicators)
-        report = self.generate_report(data, indicators, signals)
-        chart = self.create_chart(data.tail(180), indicators)
         
-        return {
-            'report': report,
-            'chart': chart,
-            'data': data,
-            'indicators': indicators
-        }
+        # Get additional market info from Yahoo Finance
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            
+            # Get previous day's close for reference
+            prev_day = ticker.history(period='2d', interval='1d')
+            prev_close = float(prev_day['Close'].iloc[0]) if len(prev_day) > 1 else None
+        except Exception as e:
+            info = {}
+            prev_close = None
+            print(f"Warning: Could not fetch additional market data: {e}")
+        
+        # Analyze the last 3 hours (180 minutes)
+        last_data = data.tail(180)
+        close_prices = last_data['Close']
+        returns = close_prices.pct_change()
 
-def send_discord_alert(webhook_url, message, chart=None):
-    """Send formatted alert to Discord"""
-    payload = {
-        "embeds": [{
-            "title": "UWS Scalping Alert",
-            "description": message,
-            "color": 0x00ff00,
-            "image": {"url": "attachment://chart.png"}
-        }]
-    }
+        # Bollinger Bands
+        window = min(10, len(close_prices))  # 10-period Bollinger Bands for faster responsiveness.
+
+        # Trend Analysis
+        first_close = close_prices.iloc[0]
+        last_close = close_prices.iloc[-1]
+        price_range = last_data['High'].max() - last_data['Low'].min()
+        cv = float((np.std(close_prices) / np.mean(close_prices)) * 100)  # Ensure cv is a scalar
+        if cv < 0.3:
+            trend = "RANGING"
+        elif last_close > first_close and price_range > 0:
+            trend = "BULLISH TREND"
+        elif last_close < first_close and price_range > 0:
+            trend = "BEARISH TREND"
+        else:
+            trend = "RANGING"
+
+        # Volatility
+        recent_returns = returns.tail(30)  # Use last 30 minutes for scalping volatility.
+        volatility = float(np.std(recent_returns.dropna()) * np.sqrt(252) * 100)
+
+        # Volume Sensitivity
+        recent_volume = data['Volume'].tail(10).mean()
+        avg_volume = data['Volume'].mean()
+        volume_spike = recent_volume > (1.5 * avg_volume)
+
+        # Compute metrics
+        try:
+            analysis = {
+                'symbol': 'ES',  # Display as ES instead of ES=F
+                'current_price': float(close_prices.iloc[-1].item()),
+                'daily_change': float(returns.iloc[-1].item() * 100),
+                'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+                'market_trend': self.identify_market_trend(data),
+                'technical_chart': self.generate_technical_chart(data, 'ES'),
+                'session_high': float(last_data['High'].max()),
+                'session_low': float(last_data['Low'].min()),
+                'prev_close': prev_close,
+                'volume': int(data['Volume'].sum()) if 'Volume' in data else None,
+                'avg_volume': info.get('averageVolume', None),
+                'description': info.get('shortName', 'E-mini S&P 500 Futures')
+            }
+        except Exception as e:
+            return {'error': f'Analysis error: {str(e)}'}
+        
+        return analysis
+
+def send_discord_message(webhook_url, message, chart_base64=None):
+    """
+    Send message to Discord webhook with optional image
     
-    files = {'file': ('chart.png', base64.b64decode(chart), 'image/png')} if chart else None
-    try:
-        response = requests.post(webhook_url, json=payload if not chart else None, 
-                               files=files if chart else None)
-        response.raise_for_status()
-        logging.info("Alert sent successfully")
-    except Exception as e:
-        logging.error(f"Discord send error: {str(e)}")
+    Args:
+        webhook_url (str): Discord webhook URL
+        message (str): Text message to send
+        chart_base64 (str, optional): Base64 encoded image
+    """
+    payload = {"content": message}
+    
+    if chart_base64:
+        # Prepare the image for Discord
+        files = {
+            'file': ('chart.png', base64.b64decode(chart_base64), 'image/png')
+        }
+        
+        try:
+            response = requests.post(webhook_url, data=payload, files=files)
+            response.raise_for_status()
+            print("Message with chart sent successfully to Discord!")
+        except Exception as e:
+            print(f"Error sending message to Discord: {e}")
+    else:
+        try:
+            response = requests.post(webhook_url, json=payload)
+            response.raise_for_status()
+            print("Message sent successfully to Discord!")
+        except Exception as e:
+            print(f"Error sending message to Discord: {e}")
+
+def generate_market_report(analyses):
+    """
+    Generate a comprehensive market report
+    
+    Args:
+        analyses (list): List of market analyses
+    
+    Returns:
+        tuple: Formatted market report and chart (if available)
+    """
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    report = f"""
+📈 UWS Market Update 📉
+📅 {current_date}
+📊 E-Mini S&P 500 Mar 25
+{'─' * 15}
+"""
+    chart = None
+    
+    for analysis in analyses:
+        if 'error' in analysis:
+            report += f"❌ Error: {analysis['error']}\n\n"
+            continue
+        
+        # Trading Insights
+        volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+        
+        # Calculate price position relative to day's range
+        price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+        
+        # Format price position description
+        range_position = "NEAR HIGH 🔝" if price_position > 75 else "NEAR LOW 📉" if price_position < 25 else "MID-RANGE ↔️"
+        
+        # Calculate change from previous close if available
+        prev_close_info = ""
+        if analysis['prev_close']:
+            change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
+            arrow = "📈" if change_from_prev > 0 else "📉"
+            prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
+            
+        # Determine trend emoji
+        trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
+        
+        # Determine momentum emoji
+        momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
+        
+        report += f"""
+💵 PRICE ACTION
+• Current: **${analysis['current_price']:.2f}** ({range_position})
+• Range: **${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}**
+• Today's Move: **{analysis['daily_change']:+.2f}%** 
+{prev_close_info}
+📊 TECHNICAL SNAPSHOT
+• Market Trend: {trend_emoji} **{analysis['market_trend']}**
+• Volatility: 🌪️ **{analysis['volatility']:.2f}%** ({volatility_status})
+• Range Position: 📍 **{price_position:.1f}%**
+
+🎯 TRADING SIGNALS
+• Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
+• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Calm'} 
+{'─' * 15}
+"""
+        
+        # Add chart image if present
+        chart = analysis.get('technical_chart', None)
+
+    return report, chart
+
 
 if __name__ == "__main__":
-    analyzer = ScalpingAnalyzer()
-    results = analyzer.run_analysis()
+    analyzer = MarketAnalysis()
+    analysis_results = analyzer.analyze_market()
     
-    if 'error' in results:
-        send_discord_alert(DISCORD_WEBHOOK_URL, f"❌ Error: {results['error']}")
+    if 'error' in analysis_results:
+        print(f"Error in analysis: {analysis_results['error']}")
     else:
-        send_discord_alert(DISCORD_WEBHOOK_URL, results['report'], results['chart'])
-        logging.info("Analysis completed successfully")
+        # Generate and send report
+        report, chart = generate_market_report([analysis_results])
+        send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+
+    print("Analysis completed and report sent. Script will stop now.")
