@@ -254,8 +254,6 @@ def generate_market_report(analyses):
 📅 {current_date}
 📊 E-Mini S&P 500 Mar 25
 {'─' * 15}
-
-
 """
     chart = None
     
