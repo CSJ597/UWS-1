@@ -10,6 +10,7 @@ from io import BytesIO
 import base64
 import datetime
 import logging
+import mplfinance as mpf
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -103,43 +104,68 @@ class MarketAnalysis:
 
     def generate_technical_chart(self, data, symbol):
         """Generate a comprehensive technical analysis chart"""
-        plt.figure(figsize=(12, 8), facecolor="#a3c1ad")  # Set the facecolor here
-
-        # Price and Bollinger Bands
-        close_prices = data['Close']
-        window = min(20, len(close_prices))  # Adjust window size if data is less
+        plt.style.use('dark_background')
         
-        middle_band = close_prices.rolling(window=window).mean()
-        std_dev = close_prices.rolling(window=window).std()
-        upper_band = middle_band + (std_dev * 2)
-        lower_band = middle_band - (std_dev * 2)
-
-        # Convert index to EST timezone
-        est_index = data.index.tz_convert('US/Eastern')
-
-        # Plot with white line for the price
-        plt.plot(est_index, close_prices, label='Close Price', color='white', linewidth=1.5)
-        plt.plot(est_index, upper_band, label='Upper Band', color='red', linestyle=':')
-        plt.plot(est_index, lower_band, label='Lower Band', color='green', linestyle=':')
-
-        plt.title('Underground Wall Street\nE-Mini S&P 500 TA', pad=20, color='white')
-        plt.xlabel('Time (EST)', color='white')
-        plt.ylabel('Price', color='white')
-        plt.legend(facecolor='none', edgecolor='none', fontsize='small', loc='upper left')
-        plt.grid(True, color='white')  # Set grid color to white
-
-        # Format x-axis to display times in EST
-        plt.xticks(rotation=45, ha='right')
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S', tz=pytz.timezone('US/Eastern')))
-
-        # Save plot to buffer with matching facecolor
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight', facecolor="#a3c1ad", transparent=True)  # Ensure facecolor matches
+        # Create figure with two subplots
+        fig = plt.figure(figsize=(15, 10))
+        
+        # Full timeframe chart
+        ax1 = plt.subplot(2, 1, 1)
+        self.plot_chart_data(data, ax1, symbol, "Full View")
+        
+        # Last hour chart
+        ax2 = plt.subplot(2, 1, 2)
+        last_hour_data = data.tail(60)  # Last 60 minutes
+        self.plot_chart_data(last_hour_data, ax2, symbol, "Last Hour")
+        
+        plt.tight_layout()
+        
+        # Save to buffer
+        buf = BytesIO()
+        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
         plt.close()
-
-        # Encode image to base64
-        return base64.b64encode(buffer.getvalue()).decode('utf-8')
-
+        
+        # Encode
+        buf.seek(0)
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    
+    def plot_chart_data(self, data, ax, symbol, title):
+        # Plot candlesticks
+        candlestick_data = []
+        for i in range(len(data)):
+            candlestick_data.append([
+                i,
+                data['Open'].iloc[i],
+                data['High'].iloc[i],
+                data['Low'].iloc[i],
+                data['Close'].iloc[i]
+            ])
+        
+        # Create candlestick chart
+        mpf.candlestick_ohlc(ax, candlestick_data, width=0.6,
+                        colorup='#26a69a', colordown='#ef5350')
+        
+        # Convert index to readable times
+        times = data.index.strftime('%I:%M %p').str.lstrip('0')  # Convert to 12-hour format, remove leading zeros
+        
+        # Set x-axis ticks and labels
+        ax.set_xticks(range(0, len(data), max(1, len(data)//5)))
+        ax.set_xticklabels(times[::max(1, len(data)//5)], rotation=45)
+        
+        # Add title and labels
+        ax.set_title(f'{symbol} {title}')
+        ax.set_ylabel('Price')
+        ax.grid(True, alpha=0.3)
+        
+        # Add volume bars at the bottom
+        if 'Volume' in data.columns:
+            volume_ax = ax.twinx()
+            volume_data = data['Volume']
+            volume_ax.bar(range(len(volume_data)), volume_data, 
+                        alpha=0.3, color='gray', width=0.6)
+            volume_ax.set_ylabel('Volume')
+            volume_ax.tick_params(axis='y', labelcolor='gray')
+        
     def analyze_market(self, symbol='ES=F'):
         """
         Comprehensive market analysis
@@ -217,14 +243,23 @@ class MarketAnalysis:
             'description': info.get('shortName', 'E-mini S&P 500 Futures')
         }
 
-        # Prepare shorter market data format
-        market_data = f"ES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%) | Vol:{analysis['volatility']:.1f}% | {analysis['market_trend']}"
+        # Prepare shorter market data format with spacing
+        market_data = (
+            f"\nES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Volatility: {analysis['volatility']:.1f}%\n"
+            f"Trend: {analysis['market_trend']}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
         
         # Prepare the API request with shorter prompts
         payload = {
-            "model": "deepseek-ai/deepseek-llm-67b-chat",
+            "model": "gpt-4",
             "messages": [
-                {"role": "system", "content": "Analyze market data and provide: 1)Summary 2)Analysis 3)Forecast"},
+                {
+                    "role": "system", 
+                    "content": "You are a market analyst. Provide a brief but insightful analysis focusing on:\n1) Technical interpretation of the current market state\n2) Key factors driving the price action\n3) Short-term directional bias\nDo not repeat the numerical data provided."
+                },
                 {"role": "user", "content": market_data}
             ],
             "temperature": 0.7,
@@ -246,13 +281,15 @@ class MarketAnalysis:
             # Handle successful responses (both 200 and 201)
             if response.status_code in [200, 201]:
                 result = response.json()
-                ai_analysis = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-                logging.info(f"Analysis received: {ai_analysis[:10000]}...")  # Log first 100 chars
+                content = result.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+                # Format the analysis with clear sections
+                ai_analysis = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\nMARKET ANALYSIS:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{content}"
+                logging.info(f"Analysis received: {ai_analysis[:10000]}...")
             else:
-                ai_analysis = 'Failed to retrieve analysis'
+                ai_analysis = '\n\nFailed to retrieve analysis'
                 logging.error(f"API Error: {response.text}")
         except Exception as e:
-            ai_analysis = f'Failed to retrieve analysis: {str(e)}'
+            ai_analysis = f'\n\nFailed to retrieve analysis: {str(e)}'
             logging.error(f"API Error: {str(e)}")
 
         # Store the AI analysis result
