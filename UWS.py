@@ -66,7 +66,7 @@ class ScalpingAnalysis:
         # Volatility calculation
         returns = close_prices.pct_change()
         volatility = {
-            'historical_volatility': float(returns.std() * np.sqrt(252) * 100),
+            'historical_volatility': float(np.std(returns) * np.sqrt(252) * 100),
             'current_daily_change': float(returns.iloc[-1] * 100)
         }
         
