@@ -121,8 +121,8 @@ class MarketAnalysis:
         upper_band = middle_band + (std_dev * 2)
         lower_band = middle_band - (std_dev * 2)
         
-        # Convert index to EST timezone
-        est_index = data.index.tz_localize('UTC').tz_convert('US/Eastern')
+        # Convert index to EST timezone (data is already tz-aware)
+        est_index = data.index.tz_convert('US/Eastern')
         
         plt.plot(est_index, close_prices, label='Close Price', color='blue')
         plt.plot(est_index, middle_band, label='Middle Band', color='gray', linestyle='--')
