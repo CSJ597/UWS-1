@@ -1,0 +1,36 @@
+name: Scalping Analysis Workflow
+
+on:
+  # Trigger this workflow on push and pull requests to the main branch
+  push:
+    branches:
+      - main
+  # Schedule it to run once every day at 8:00 AM UTC (before market open)
+  schedule:
+    - cron: "0 8 * * *"
+
+jobs:
+  scalping-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.8'  # You can adjust the Python version as needed
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run scalping analysis script
+      run: |
+        python scalping_analysis.py
+
+    - name: Notify result (optional)
+      run: |
+        echo "Scalping analysis completed!"  # This can be modified to send notifications
