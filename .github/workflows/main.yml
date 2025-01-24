@@ -2,11 +2,11 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    - cron: '02 16 * * 1-5'  # Scheduled run: 10:20 AM EST (15:20 UTC)
+    - cron: '7 16 * * 1-5'  # Scheduled run: 11:07 AM EST (16:07 UTC)
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
-        description: 'Run type (scheduled run at 10:59 AM EST will still occur)'
+        description: 'Run type (scheduled run at 11:07 AM EST will still occur)'
         required: false
         default: 'auto'
         type: choice
@@ -26,7 +26,7 @@ jobs:
     # Separate concurrency for manual and scheduled runs
     concurrency:
       group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.run_id }}
-      cancel-in-progress: true  # Prevent overlapping runs
+      cancel-in-progress: false  # Allow parallel runs
 
     steps:
       - name: Debug Info
@@ -35,7 +35,7 @@ jobs:
           echo "Run type: ${{ github.event.inputs.run_type || 'auto' }}"
           echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
           echo "Timezone info: $(date +%Z) $(date +%z)"
-          echo "Next scheduled run is at 10:20 AM EST (15:20 UTC)"
+          echo "Next scheduled run is at 11:07 AM EST (16:07 UTC)"
           echo "Scheduled event? $([[ "${{ github.event_name }}" == "schedule" ]] && echo 'Yes' || echo 'No')"
 
       - name: Checkout repository
@@ -64,19 +64,20 @@ jobs:
 
           echo "Run type determined as: $run_type"
 
-          # Prevent overlapping manual and scheduled runs
-          scheduled_hour=15
-          scheduled_minute=20
+          # Get current time and scheduled time
+          scheduled_hour=16
+          scheduled_minute=7
           current_hour=$(date -u +%H)
           current_minute=$(date -u +%M)
+          current_sec=$(date +%S)
 
-          if [ "$run_type" = "auto" ] && [ "$current_hour" -eq "$scheduled_hour" ] && [ "$current_minute" -eq "$scheduled_minute" ]; then
-              echo "Skipping run because a scheduled run is due at 15:20 UTC."
+          # Skip manual run if close to scheduled time
+          if [ "$run_type" = "auto" ] && [ "$current_hour" -eq "$scheduled_hour" ] && [ "$current_minute" -eq "$scheduled_minute" ] && [ "$current_sec" -lt 5 ]; then
+              echo "Skipping manual run because the scheduled run is due at 16:07 UTC."
               exit 0
           fi
 
           # Wait for exact second if needed
-          current_sec=$(date +%S)
           if [ $current_sec -lt 58 ]; then
               sleep_time=$((60 - $current_sec))
               echo "Waiting $sleep_time seconds to start on the minute..."
