@@ -2,7 +2,6 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.finance import candlestick_ohlc
 import seaborn as sns
 import requests
 import io
@@ -10,8 +9,6 @@ from io import BytesIO
 import base64
 import datetime
 import logging
-import mplfinance as mpf
-from mplfinance.original_flavor import candlestick_ohlc
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -105,19 +102,16 @@ class MarketAnalysis:
 
     def generate_technical_chart(self, data, symbol):
         """Generate a comprehensive technical analysis chart"""
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
         plt.style.use('dark_background')
         
-        # Create figure with two subplots
-        fig = plt.figure(figsize=(15, 10))
+        # Plot full timeframe
+        self._plot_ohlcv(data, ax1, f'{symbol} Full View')
         
-        # Full timeframe chart
-        ax1 = plt.subplot(2, 1, 1)
-        self.plot_chart_data(data, ax1, symbol, "Full View")
-        
-        # Last hour chart
-        ax2 = plt.subplot(2, 1, 2)
+        # Plot last hour
         last_hour_data = data.tail(60)  # Last 60 minutes
-        self.plot_chart_data(last_hour_data, ax2, symbol, "Last Hour")
+        self._plot_ohlcv(last_hour_data, ax2, f'{symbol} Last Hour')
         
         plt.tight_layout()
         
@@ -130,44 +124,42 @@ class MarketAnalysis:
         buf.seek(0)
         return base64.b64encode(buf.getvalue()).decode('utf-8')
     
-    def plot_chart_data(self, data, ax, symbol, title):
+    def _plot_ohlcv(self, data, ax, title):
+        """Plot OHLCV data on the given axis"""
         # Plot candlesticks
-        candlestick_data = []
-        for i in range(len(data)):
-            candlestick_data.append([
-                i,
-                data['Open'].iloc[i],
-                data['High'].iloc[i],
-                data['Low'].iloc[i],
-                data['Close'].iloc[i]
-            ])
+        up = data['Close'] > data['Open']
+        down = data['Close'] <= data['Open']
         
-        # Create candlestick chart
-        from mplfinance.original_flavor import candlestick_ohlc
-        candlestick_ohlc(ax, candlestick_data, width=0.6,
-                        colorup='#26a69a', colordown='#ef5350')
+        # Plot up candlesticks
+        ax.bar(data.index[up], data['High'][up] - data['Low'][up], 
+               bottom=data['Low'][up], width=0.8, color='#26a69a', alpha=0.3)
+        ax.bar(data.index[up], data['Close'][up] - data['Open'][up], 
+               bottom=data['Open'][up], width=0.8, color='#26a69a')
         
-        # Convert index to readable times
-        times = data.index.strftime('%I:%M %p').str.lstrip('0')  # Convert to 12-hour format, remove leading zeros
+        # Plot down candlesticks
+        ax.bar(data.index[down], data['High'][down] - data['Low'][down],
+               bottom=data['Low'][down], width=0.8, color='#ef5350', alpha=0.3)
+        ax.bar(data.index[down], data['Close'][down] - data['Open'][down],
+               bottom=data['Open'][down], width=0.8, color='#ef5350')
         
-        # Set x-axis ticks and labels
+        # Format x-axis
+        times = data.index.strftime('%I:%M %p').str.lstrip('0')
         ax.set_xticks(range(0, len(data), max(1, len(data)//5)))
         ax.set_xticklabels(times[::max(1, len(data)//5)], rotation=45)
         
-        # Add title and labels
-        ax.set_title(f'{symbol} {title}')
-        ax.set_ylabel('Price')
-        ax.grid(True, alpha=0.3)
-        
-        # Add volume bars at the bottom
+        # Add volume at the bottom
         if 'Volume' in data.columns:
             volume_ax = ax.twinx()
-            volume_data = data['Volume']
-            volume_ax.bar(range(len(volume_data)), volume_data, 
-                        alpha=0.3, color='gray', width=0.6)
+            volume_ax.bar(data.index, data['Volume'], 
+                        alpha=0.3, color='gray', width=0.8)
             volume_ax.set_ylabel('Volume')
             volume_ax.tick_params(axis='y', labelcolor='gray')
         
+        # Customize appearance
+        ax.set_title(title)
+        ax.set_ylabel('Price')
+        ax.grid(True, alpha=0.3)
+
     def analyze_market(self, symbol='ES=F'):
         """
         Comprehensive market analysis
