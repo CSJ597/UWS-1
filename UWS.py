@@ -250,9 +250,9 @@ def generate_market_report(analyses):
     """
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
     report = f"""
-🎯 UWS Update 🎯
-📅 {current_date}
-{'═' * 40}
+📈 UWS Market Update 📉
+{'─' * 15}
+
 """
     chart = None
     
@@ -292,10 +292,6 @@ def generate_market_report(analyses):
         momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
         
         report += f"""
-📈 MARKET OVERVIEW 📉
-{'─' * 30}
-{analysis['description']} 
-
 💵 PRICE ACTION
 • Current: ${analysis['current_price']:.2f} ({range_position})
 • Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
