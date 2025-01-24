@@ -2,8 +2,10 @@ name: UWS Market Analysis
 
 on:
   schedule:
-    # Run at exactly 9:26:00 AM EST (14:26:00 UTC) on weekdays
-    - cron: '29 14 * * 1-5'
+    # Run at exactly 9:32:00 AM EST (14:32:00 UTC) on weekdays
+    - cron: '32 14 * * 1-5'
+  push:
+    branches: [ main ]  # Trigger on push to main branch
   workflow_dispatch:  # Manual trigger with optional inputs
     inputs:
       run_type:
