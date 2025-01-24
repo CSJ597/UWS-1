@@ -3,7 +3,7 @@ name: Daily UWS Analysis
 on:
   schedule:
     # This cron expression runs at 11:47 AM EST (16:47 UTC) every day
-    - cron: '47 16 * * *'
+    - cron: '52 16 * * *'
 
 permissions:
   contents: read
