@@ -1,9 +1,8 @@
-name: UWS Market Analysis
+name: UWS Market Analysis - Auto
 
 on:
   schedule:
-    - cron: '02 17 * * *'  # Scheduled run: 17 AM EST (15:20 UTC)
-  workflow_dispatch:  # Manual trigger option
+    - cron: '06 17' * * *'  # Scheduled run: 10:20 AM EST (15:20 UTC)
 
 permissions:
   contents: read
@@ -13,20 +12,17 @@ jobs:
   market-analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Separate concurrency for manual and scheduled runs
     concurrency:
       group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.run_id }}
-      cancel-in-progress: false  # Allow both manual and scheduled to run in parallel
+      cancel-in-progress: false  # Allow multiple runs to happen
 
     steps:
       - name: Debug Info
         run: |
           echo "Event name: ${{ github.event_name }}"
-          echo "Run type: ${{ github.event.inputs.run_type || 'auto' }}"
+          echo "Run type: auto"
           echo "Current time: $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
           echo "Timezone info: $(date +%Z) $(date +%z)"
-          echo "Next scheduled run is at 10:20 AM EST (15:20 UTC)"
-          echo "Scheduled event? $([[ "${{ github.event_name }}" == "schedule" ]] && echo 'Yes' || echo 'No')"
 
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -45,34 +41,6 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
         run: |
-          # Determine run type based on the event
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-              run_type="auto"
-          else
-              run_type="${{ github.event.inputs.run_type || 'auto' }}"
-          fi
-
-          echo "Run type determined as: $run_type"
-
-          # Wait for exact second if needed
-          current_sec=$(date +%S)
-          if [ $current_sec -lt 58 ]; then
-              sleep_time=$((60 - $current_sec))
-              echo "Waiting $sleep_time seconds to start on the minute..."
-              sleep $sleep_time
-          fi
-
           echo "Starting market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
-
-          if [ "$run_type" = "auto" ]; then
-              echo "Running auto analysis..."
-              python UWS.py --auto
-          elif [ "$run_type" = "print" ]; then
-              echo "Running manual analysis (print to console)..."
-              python UWS.py --print
-          elif [ "$run_type" = "discord" ]; then
-              echo "Running manual analysis (send to Discord)..."
-              python UWS.py --discord
-          fi
-
+          python UWS.py --auto
           echo "Finished market analysis at $(date +"%Y-%m-%d %H:%M:%S.%N %Z")"
