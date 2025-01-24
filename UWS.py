@@ -220,15 +220,12 @@ class MarketAnalysis:
         
         # Make API request for AI analysis
         api_key = '512dc9f0dfe54666b0d98ff42746dd13'
+        results = f"Current Price: {analysis['current_price']}, Daily Change: {analysis['daily_change']}, Volatility: {analysis['volatility']}, Market Trend: {analysis['market_trend']}, Session High: {analysis['session_high']}, Session Low: {analysis['session_low']}, Previous Close: {analysis['prev_close']}, Volume: {analysis['volume']}, Average Volume: {analysis['avg_volume']}, Description: {analysis['description']}"
         payload = {
-            "inputs": {
-                "text": "Tell me about the current market trend for E-mini S&P 500 Futures."
-            },
-            "parameters": {
-                "model": "mistralai/Mistral-7B-Instruct-v0.2",
-                "temperature": 0.7,
-                "max_tokens": 256,
-            }
+            "prompt": f"Analyze the following market results: {results}",
+            "model": "mistralai/Mistral-7B-Instruct-v0.2",
+            "temperature": 0.7,
+            "max_tokens": 256,
         }
         headers = {
             'Authorization': f'Bearer {api_key}',
