@@ -1,4 +1,4 @@
-name: Market Analysis
+name: UWS Update
 
 on:
   workflow_dispatch:  # Manual trigger
