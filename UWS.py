@@ -417,17 +417,32 @@ class MarketAnalysis:
     def send_discord_message(self, webhook_url, message, chart_base64=None):
         """Send a message to Discord with optional chart image"""
         try:
-            payload = {"content": message}
+            # Prepare the message data
+            data = {
+                "content": message[:1900] + "..." if len(message) > 1900 else message,  # Discord has a 2000 char limit
+                "username": "UWS Market Analysis"
+            }
             
+            files = {}
+            
+            # If we have a chart, add it as a file
             if chart_base64:
-                # Create image file from base64
-                image_data = base64.b64decode(chart_base64)
-                files = {
-                    'file': ('chart.png', image_data, 'image/png')
-                }
-                response = requests.post(webhook_url, data=payload, files=files)
+                try:
+                    # Decode base64 string to bytes
+                    chart_bytes = base64.b64decode(chart_base64)
+                    
+                    # Create file object
+                    files = {
+                        'file': ('chart.png', chart_bytes, 'image/png')
+                    }
+                except Exception as e:
+                    logging.error(f"Error processing chart image: {str(e)}")
+            
+            # Send the message
+            if files:
+                response = requests.post(webhook_url, data=data, files=files)
             else:
-                response = requests.post(webhook_url, json=payload)
+                response = requests.post(webhook_url, json=data)
             
             response.raise_for_status()
             logging.info("Discord message sent successfully")
@@ -436,65 +451,53 @@ class MarketAnalysis:
             logging.error(f"Failed to send Discord message: {str(e)}")
             raise
 
-def generate_market_report(analysis_results):
-    """
-    Generate a comprehensive market report
-    
-    Args:
-        analysis_results (list): List of market analyses
-    
-    Returns:
-        tuple: Formatted market report and chart (if available)
-    """
-    try:
-        # Get the current date
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        
-        # Create the report header
-        report = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MARKET ANALYSIS: {current_date}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"""
-        
-        chart = None
-        
-        for analysis in analysis_results:
-            if 'error' in analysis:
-                report += f"Error: {analysis['error']}\n\n"
-                continue
+    def generate_market_report(self, analysis_results):
+        """Generate a comprehensive market report"""
+        try:
+            # Get the current date
+            current_date = datetime.now().strftime("%Y-%m-%d")
             
-            # Trading Insights
-            volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+            # Create the report header
+            report = f"MARKET ANALYSIS: {current_date}\n{'─' * 30}\n\n"
             
-            # Calculate price position relative to day's range
-            price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+            chart = None
             
-            # Format price position description
-            range_position = "NEAR HIGH" if price_position > 75 else "NEAR LOW" if price_position < 25 else "MID-RANGE"
-            
-            # Calculate change from previous close if available
-            prev_close_info = ""
-            if analysis['prev_close']:
-                change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-                prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
-            
-            # Format news events
-            news_section = "\nUPCOMING NEWS\n"
-            if analysis.get('news_events'):
-                for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
-                    impact_emoji = "" if event['impact'] == "High" else ""
-                    news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
-            else:
-                news_section += "• No high-impact news events in next 30 minutes\n"
-            
-            # Add recent market headlines
-            if analysis.get('market_news'):
-                news_section += "\nRECENT HEADLINES\n"
-                for news in analysis['market_news'][:3]:  # Show top 3 headlines
-                    news_section += f"• {news['title']} ({news['time']})\n"
-            
-            report += f"""
-PRICE ACTION
+            for analysis in analysis_results:
+                if 'error' in analysis:
+                    report += f"Error: {analysis['error']}\n\n"
+                    continue
+                
+                # Trading Insights
+                volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+                
+                # Calculate price position relative to day's range
+                price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+                
+                # Format price position description
+                range_position = "NEAR HIGH" if price_position > 75 else "NEAR LOW" if price_position < 25 else "MID-RANGE"
+                
+                # Calculate change from previous close if available
+                prev_close_info = ""
+                if analysis['prev_close']:
+                    change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
+                    prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
+                
+                # Format news events
+                news_section = "\nUPCOMING NEWS\n"
+                if analysis.get('news_events'):
+                    for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
+                        impact_emoji = "" if event['impact'] == "High" else ""
+                        news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
+                else:
+                    news_section += "• No high-impact news events in next 30 minutes\n"
+                
+                # Add recent market headlines
+                if analysis.get('market_news'):
+                    news_section += "\nRECENT HEADLINES\n"
+                    for news in analysis['market_news'][:3]:
+                        news_section += f"• {news['title']} ({news['time']})\n"
+                
+                report += f"""PRICE ACTION
 • Current: ${analysis['current_price']:.2f} ({range_position})
 • Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
 {prev_close_info}
@@ -507,16 +510,17 @@ MARKET CONDITIONS
 
 ANALYSIS
 {analysis['ai_analysis']}
-{'─' * 15}
+{'─' * 30}
 """
+                
+                # Add chart image if present
+                chart = analysis.get('technical_chart', None)
             
-            # Add chart image if present
-            chart = analysis.get('technical_chart', None)
-
-        return report, chart
-    except Exception as e:
-        logging.error(f"Error generating report: {str(e)}")
-        return f"Error generating report: {str(e)}", None
+            return report, chart
+            
+        except Exception as e:
+            logging.error(f"Error generating report: {str(e)}")
+            return f"Error generating report: {str(e)}", None
 
 
 if __name__ == "__main__":
@@ -531,7 +535,7 @@ if __name__ == "__main__":
             analysis_results = market.analyze_market()
             
             # Generate report
-            report, chart = generate_market_report([analysis_results])
+            report, chart = market.generate_market_report([analysis_results])
             
             # Send to Discord
             market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
