@@ -98,7 +98,7 @@ class MarketAnalysis:
         try:
             analysis = {
                 'symbol': 'ES',
-                'current_price': float(data['Close'].iloc[-1]),
+                'current_price': data['Close'].iloc[-1].item(),
                 'market_trend': "BULLISH" if data['Close'].iloc[-1] > data['Close'].iloc[0] else "BEARISH",
                 'technical_chart': self.generate_technical_chart(data, 'ES')
             }
