@@ -106,6 +106,11 @@ class MarketAnalysis:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
         plt.style.use('dark_background')
         
+        # Set the background color
+        fig.patch.set_facecolor('#1e222d')
+        ax1.set_facecolor('#1e222d')
+        ax2.set_facecolor('#1e222d')
+        
         # Plot full timeframe
         self._plot_ohlcv(data, ax1, f'{symbol} Full View')
         
@@ -117,7 +122,8 @@ class MarketAnalysis:
         
         # Save to buffer
         buf = BytesIO()
-        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', 
+                   facecolor='#1e222d', edgecolor='none')
         plt.close()
         
         # Encode
@@ -130,41 +136,45 @@ class MarketAnalysis:
         df = data.reset_index()
         df.index = range(len(df))
         
-        # Plot candlesticks
-        up = df['Close'] > df['Open']
-        down = ~up
+        # Calculate trend for color
+        trend_up = df['Close'].iloc[-1] > df['Close'].iloc[0]
+        line_color = '#26a69a' if trend_up else '#ef5350'
         
-        # Plot up candlesticks
-        for idx in df.index[up]:
-            ax.bar(idx, df.loc[idx, 'High'] - df.loc[idx, 'Low'],
-                  bottom=df.loc[idx, 'Low'], width=0.8, color='#26a69a', alpha=0.3)
-            ax.bar(idx, df.loc[idx, 'Close'] - df.loc[idx, 'Open'],
-                  bottom=df.loc[idx, 'Open'], width=0.8, color='#26a69a')
+        # Plot price line with gradient fill
+        ax.plot(df.index, df['Close'], 
+               color=line_color, linewidth=2, label='Price',
+               path_effects=[plt.matplotlib.patheffects.withSimplePatchShadow(
+                   offset=(0, 1), alpha=0.3, rho=0.1)])
         
-        # Plot down candlesticks
-        for idx in df.index[down]:
-            ax.bar(idx, df.loc[idx, 'High'] - df.loc[idx, 'Low'],
-                  bottom=df.loc[idx, 'Low'], width=0.8, color='#ef5350', alpha=0.3)
-            ax.bar(idx, df.loc[idx, 'Close'] - df.loc[idx, 'Open'],
-                  bottom=df.loc[idx, 'Open'], width=0.8, color='#ef5350')
+        # Add gradient fill
+        ax.fill_between(df.index, df['Close'], df['Close'].min(),
+                       alpha=0.1, color=line_color)
+        
+        # Add volume at the bottom
+        if 'Volume' in df.columns:
+            volume_ax = ax.twinx()
+            volume_ax.fill_between(df.index, df['Volume'],
+                               alpha=0.15, color='gray')
+            volume_ax.set_ylabel('Volume', color='gray')
+            volume_ax.tick_params(axis='y', colors='gray')
+            volume_ax.grid(False)
         
         # Format x-axis with original timestamps
         times = data.index.strftime('%I:%M %p').str.lstrip('0')
         ax.set_xticks(range(0, len(df), max(1, len(df)//5)))
         ax.set_xticklabels(times[::max(1, len(df)//5)], rotation=45)
         
-        # Add volume at the bottom
-        if 'Volume' in df.columns:
-            volume_ax = ax.twinx()
-            volume_ax.bar(df.index, df['Volume'],
-                        alpha=0.3, color='gray', width=0.8)
-            volume_ax.set_ylabel('Volume')
-            volume_ax.tick_params(axis='y', labelcolor='gray')
-        
         # Customize appearance
-        ax.set_title(title)
-        ax.set_ylabel('Price')
-        ax.grid(True, alpha=0.3)
+        ax.set_title(title, color='white', pad=20)
+        ax.set_ylabel('Price', color='white')
+        ax.tick_params(colors='white')
+        ax.grid(True, alpha=0.2, color='gray')
+        
+        # Add percentage change
+        pct_change = ((df['Close'].iloc[-1] - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
+        ax.text(0.02, 0.95, f'{pct_change:+.2f}%', 
+                transform=ax.transAxes, color=line_color,
+                fontsize=12, fontweight='bold')
 
     def analyze_market(self, symbol='ES=F'):
         """Comprehensive market analysis"""
@@ -180,17 +190,15 @@ class MarketAnalysis:
             # Calculate metrics
             close_prices = data['Close']
             returns = close_prices.pct_change()
-            last_data = data.tail(1)
             
-            # Get scalar values to avoid FutureWarnings
+            # Get scalar values
             high_val = data['High'].iloc[0]
             low_val = data['Low'].iloc[0]
             price_range = high_val - low_val
-            
             first_close = data['Close'].iloc[0]
             last_close = data['Close'].iloc[-1]
             
-            # Calculate standard deviation and mean using numpy on values
+            # Calculate trend
             close_values = close_prices.values
             cv = float((np.std(close_values) / np.mean(close_values)) * 100)
             
@@ -201,12 +209,12 @@ class MarketAnalysis:
             else:
                 trend = "BEARISH"
             
-            # Volatility calculation using numpy on values
+            # Calculate volatility
             recent_returns = returns.tail(30)
             returns_values = recent_returns.dropna().values
             volatility = float(np.std(returns_values) * np.sqrt(252) * 100)
             
-            # Prepare analysis dictionary with scalar values
+            # Prepare analysis
             analysis = {
                 'symbol': 'ES',
                 'current_price': last_close,
@@ -222,22 +230,16 @@ class MarketAnalysis:
                 'description': info.get('shortName', 'E-mini S&P 500 Futures')
             }
             
-            # Prepare shorter market data format with spacing
-            market_data = (
-                f"\nES ${analysis['current_price']:.2f} ({analysis['daily_change']:.1f}%)\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"Volatility: {analysis['volatility']:.1f}%\n"
-                f"Trend: {analysis['market_trend']}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            )
+            # Format market data (shorter version)
+            market_data = f"ES ${analysis['current_price']:.2f} {analysis['daily_change']:.1f}% | {trend}"
             
-            # Prepare the API request with shorter prompts
+            # Get AI analysis with shorter prompt
             payload = {
                 "model": "gpt-4",
                 "messages": [
                     {
                         "role": "system", 
-                        "content": "You are a market analyst. Provide a brief but insightful analysis focusing on:\n1) Technical interpretation of the current market state\n2) Key factors driving the price action\n3) Short-term directional bias\nDo not repeat the numerical data provided."
+                        "content": "Brief market analysis focusing on technical state and bias."
                     },
                     {"role": "user", "content": market_data}
                 ],
