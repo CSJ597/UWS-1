@@ -33,9 +33,9 @@ class ScalpingAnalysis:
         histogram = macd_line - signal_line
         
         return {
-            'macd_line': macd_line.iloc[-1] if len(macd_line) > 0 else np.nan,
-            'signal_line': signal_line.iloc[-1] if len(signal_line) > 0 else np.nan,
-            'histogram': histogram.iloc[-1] if len(histogram) > 0 else np.nan
+            'macd_line': float(macd_line.iloc[-1]) if len(macd_line) > 0 else np.nan,
+            'signal_line': float(signal_line.iloc[-1]) if len(signal_line) > 0 else np.nan,
+            'histogram': float(histogram.iloc[-1]) if len(histogram) > 0 else np.nan
         }
 
     def _custom_rsi(self, prices, periods=14):
@@ -50,7 +50,7 @@ class ScalpingAnalysis:
         rs = avg_gain / avg_loss
         rsi = 100.0 - (100.0 / (1.0 + rs))
         
-        return rsi.iloc[-1] if not rsi.empty else np.nan
+        return float(rsi.iloc[-1]) if not rsi.empty else np.nan
 
     def advanced_scalping_analysis(self, symbol='ES=F'):
         """Comprehensive scalping preparation analysis"""
@@ -58,7 +58,7 @@ class ScalpingAnalysis:
         data = self.get_yahoo_data(symbol)
         
         if data.empty:
-            return "Unable to fetch market data"
+            return f"Unable to fetch market data for {symbol}"
         
         # Price analysis
         close_prices = data['Close']
@@ -66,8 +66,8 @@ class ScalpingAnalysis:
         # Volatility calculation
         returns = close_prices.pct_change()
         volatility = {
-            'historical_volatility': returns.std() * np.sqrt(252) * 100,
-            'current_daily_change': returns.iloc[-1] * 100
+            'historical_volatility': float(returns.std() * np.sqrt(252) * 100),
+            'current_daily_change': float(returns.iloc[-1] * 100)
         }
         
         # Technical indicators
@@ -80,17 +80,17 @@ class ScalpingAnalysis:
 🔍 SYMBOL: {symbol}
 
 📊 MARKET STRUCTURE:
-- Current Price: ${close_prices.iloc[-1]:,.2f}
+- Current Price: ${close_prices.iloc[-1]:.2f}
 
 📈 MARKET METRICS:
-- Historical Volatility: {volatility['historical_volatility']:,.2f}%
-- Daily Price Change: {volatility['current_daily_change']:,.2f}%
+- Historical Volatility: {volatility['historical_volatility']:.2f}%
+- Daily Price Change: {volatility['current_daily_change']:.2f}%
 
 🚀 TECHNICAL INDICATORS:
-- MACD Line: {macd['macd_line']:,.4f}
-- MACD Signal: {macd['signal_line']:,.4f}
-- MACD Histogram: {macd['histogram']:,.4f}
-- RSI: {rsi:,.2f}
+- MACD Line: {macd['macd_line']:.4f}
+- MACD Signal: {macd['signal_line']:.4f}
+- MACD Histogram: {macd['histogram']:.4f}
+- RSI: {rsi:.2f}
 
 💡 SCALPING INSIGHTS:
 {self._generate_scalping_insights(macd, rsi, volatility)}
