@@ -276,36 +276,33 @@ class MarketAnalysis:
             
             return analysis
 
-def send_discord_message(webhook_url, message, chart_base64=None):
-    """
-    Send message to Discord webhook with optional image
-    
-    Args:
-        webhook_url (str): Discord webhook URL
-        message (str): Text message to send
-        chart_base64 (str, optional): Base64 encoded image
-    """
-    payload = {"content": message}
-    
-    if chart_base64:
-        # Prepare the image for Discord
-        files = {
-            'file': ('chart.png', base64.b64decode(chart_base64), 'image/png')
-        }
+    def send_discord_message(self, webhook_url, message, chart_base64=None):
+        """Send a message to Discord with optional chart image
         
+        Args:
+            webhook_url (str): Discord webhook URL
+            message (str): Message to send
+            chart_base64 (str, optional): Base64 encoded chart image
+        """
         try:
-            response = requests.post(webhook_url, data=payload, files=files)
+            payload = {"content": message}
+            
+            if chart_base64:
+                # Create image file from base64
+                image_data = base64.b64decode(chart_base64)
+                files = {
+                    'file': ('chart.png', image_data, 'image/png')
+                }
+                response = requests.post(webhook_url, data=payload, files=files)
+            else:
+                response = requests.post(webhook_url, json=payload)
+            
             response.raise_for_status()
-            print("Message with chart sent successfully to Discord!")
+            logging.info("Discord message sent successfully")
+            
         except Exception as e:
-            print(f"Error sending message to Discord: {e}")
-    else:
-        try:
-            response = requests.post(webhook_url, json=payload)
-            response.raise_for_status()
-            print("Message sent successfully to Discord!")
-        except Exception as e:
-            print(f"Error sending message to Discord: {e}")
+            logging.error(f"Failed to send Discord message: {str(e)}")
+            raise
 
 def generate_market_report(analyses):
     """
@@ -386,6 +383,6 @@ if __name__ == "__main__":
     else:
         # Generate and send report
         report, chart = generate_market_report([analysis_results])
-        send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+        analyzer.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
 
     print("Analysis completed and report sent. Script will stop now.")
