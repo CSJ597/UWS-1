@@ -164,19 +164,43 @@ class MarketAnalysis:
         if data_error:
             return {'error': data_error}
         
+        # Get additional market info from Yahoo Finance
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            
+            # Get previous day's close for reference
+            prev_day = ticker.history(period='2d', interval='1d')
+            prev_close = float(prev_day['Close'].iloc[0]) if len(prev_day) > 1 else None
+        except Exception as e:
+            info = {}
+            prev_close = None
+            print(f"Warning: Could not fetch additional market data: {e}")
+        
         # Analyze data
         close_prices = data['Close']
         returns = close_prices.pct_change()
+        current_price = float(close_prices.iloc[-1].item())
+        
+        # Calculate session high and low
+        session_high = float(data['High'].max())
+        session_low = float(data['Low'].min())
         
         # Compute metrics
         try:
             analysis = {
-                'symbol': symbol,
-                'current_price': float(close_prices.iloc[-1].item()),
+                'symbol': 'ES',  # Display as ES instead of ES=F
+                'current_price': current_price,
                 'daily_change': float(returns.iloc[-1].item() * 100),
                 'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
                 'market_trend': self.identify_market_trend(data),
-                'technical_chart': self.generate_technical_chart(data, symbol)
+                'technical_chart': self.generate_technical_chart(data, 'ES'),
+                'session_high': session_high,
+                'session_low': session_low,
+                'prev_close': prev_close,
+                'volume': int(data['Volume'].sum()) if 'Volume' in data else None,
+                'avg_volume': info.get('averageVolume', None),
+                'description': info.get('shortName', 'E-mini S&P 500 Futures')
             }
         except Exception as e:
             return {'error': f'Analysis error: {str(e)}'}
@@ -225,7 +249,12 @@ def generate_market_report(analyses):
         tuple: Formatted market report and chart (if available)
     """
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    report = f"🚀 SCALPING INSIGHTS: 📊\nDate: {current_date}\n\n"
+    current_time = datetime.datetime.now().strftime("%I:%M %p EST")
+    report = f"""
+🎯 UWS Update 🎯
+📅 {current_date} | ⏰ {current_time}
+{'═' * 40}
+"""
     chart = None
     
     for analysis in analyses:
@@ -236,17 +265,59 @@ def generate_market_report(analyses):
         # Trading Insights
         volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
         
+        # Calculate price position relative to day's range
+        if analysis['session_high'] != analysis['session_low']:
+            price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100
+        else:
+            price_position = 50  # Default to middle if no range
+            
+        # Format price position description
+        if price_position > 75:
+            range_position = "NEAR HIGH 🔝"
+        elif price_position < 25:
+            range_position = "NEAR LOW 📉"
+        else:
+            range_position = "MID-RANGE ↔️"
+            
+        # Calculate change from previous close if available
+        prev_close_info = ""
+        if analysis['prev_close']:
+            change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
+            arrow = "📈" if change_from_prev > 0 else "📉"
+            prev_close_info = f"📊 From Previous Close: {arrow} {change_from_prev:+.2f}%\n"
+            
+        # Determine trend emoji
+        trend_emoji = "🔄" if analysis['market_trend'] == "RANGING" else "📈" if "BULLISH" in analysis['market_trend'] else "📉"
+        
+        # Determine momentum emoji
+        momentum_emoji = "🚀" if abs(analysis['daily_change']) > 1 else "🔄"
+        
         report += f"""
-🔍 Symbol: {analysis['symbol']}
-💰 Current Price: ${analysis['current_price']:.2f}
-📈 Daily Change: {analysis['daily_change']:.2f}%
-🌪️ Volatility: {analysis['volatility']:.2f}% ({volatility_status})
+📈 MARKET OVERVIEW 📉
+{'─' * 30}
+{analysis['description']} 
 
-🎯 SCALPING INSIGHTS:
-- Market Trend: {analysis['market_trend']}
-- Volatility Level: {volatility_status}
-- Price Action: {'Momentum Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
-""" + "-"*50 + "\n\n"
+💵 PRICE ACTION
+• Current: ${analysis['current_price']:.2f} ({range_position})
+• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
+• Today's Move: {analysis['daily_change']:+.2f}% 
+{prev_close_info}
+📊 TECHNICAL SNAPSHOT
+• Market Trend: {trend_emoji} {analysis['market_trend']}
+• Volatility: 🌪️ {analysis['volatility']:.2f}% ({volatility_status})
+• Range Position: 📍 {price_position:.1f}%
+
+🎯 TRADING SIGNALS
+• Momentum: {momentum_emoji} {'Building' if abs(analysis['daily_change']) > 1 else 'Consolidating'}
+• Volatility: {'⚠️ High' if volatility_status == 'HIGH' else '✅ Favorable' if volatility_status == 'MODERATE' else '⚡ Low'}
+"""
+        
+        if analysis['volume'] and analysis['avg_volume']:
+            volume_ratio = (analysis['volume'] / analysis['avg_volume']) * 100
+            volume_emoji = "🔥" if volume_ratio > 100 else "💤"
+            report += f"• Volume: {volume_emoji} {volume_ratio:.1f}% of average\n"
+            
+        report += f"\n{'═' * 40}\n"
         
         # Use the first available chart
         if not chart:
