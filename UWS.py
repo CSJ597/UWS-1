@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 13  #  PM
-RUN_MINUTE = 7
+RUN_MINUTE = 15
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -313,33 +313,57 @@ class MarketAnalysis:
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
-        Generate a concise market analysis prompt
+        Generate a comprehensive market analysis prompt focusing on chart analysis
         
         Args:
-            market_data (dict): Market data
-            news_events (list): Upcoming high-impact news events
-            market_news (list): Recent market headlines
+            market_data (dict): Comprehensive market data
+            news_events (list): Upcoming high-impact news events (not used)
+            market_news (list): Recent market headlines (not used)
         
         Returns:
             dict: Structured prompt payload for AI analysis
         """
         try:
-            # Create concise market context
-            market_info = (f"Price: ${market_data['current_price']:.2f}, "
-                           f"Change: {market_data['daily_change']:.2f}%, "
-                           f"Trend: {market_data['market_trend']}")
+            # Prepare technical context
+            technical_context = f"""
+TECHNICAL SNAPSHOT:
+- Current Price: ${market_data['current_price']:.2f}
+- Day's Range: ${market_data['session_low']:.2f} - ${market_data['session_high']:.2f}
+- Daily Change: {market_data['daily_change']:.2f}%
+- Volatility: {market_data['volatility']:.2f}%
+- Market Trend: {market_data['market_trend']}
+"""
+
+            # Construct the prompt
+            prompt_content = f"""
+YOU ARE: A professional quantitative market analyst performing a surgical market analysis.
+
+{technical_context}
+
+ANALYSIS DIRECTIVE:
+1. Analyze the chart data and provide insights.
+2. Dissect price action with mathematical precision.
+3. Identify immediate market structure.
+4. Assess probabilistic trading scenarios.
+5. Highlight critical support/resistance levels.
+6. Determine actionable trading bias.
+
+REQUIRED OUTPUT:
+- Maximum 250 words.
+- Use precise numerical references.
+- Provide probabilistic outcome scenarios.
+- Include specific entry/exit considerations.
+- Focus on high-probability market movements.
+"""
 
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a market analyst. Provide a detailed analysis based on the chart data."
+                    "content": "You are an elite quantitative market analyst providing high-precision market intelligence."
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"Analyze the following chart data:\n{market_info}\n\n"
-                        "Provide:\n- Key insights from the chart\n- Forecast based on chart patterns\n- Suggested trading positions."
-                    )
+                    "content": prompt_content
                 }
             ]
 
@@ -347,7 +371,7 @@ class MarketAnalysis:
                 "model": "gpt-3.5-turbo",
                 "messages": messages,
                 "temperature": 0.3,
-                "max_tokens": 300  # Allow for more detailed response
+                "max_tokens": 300  # Allow for detailed response
             }
         
         except Exception as e:
