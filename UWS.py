@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 14  #  PM
-RUN_MINUTE = 22
+RUN_MINUTE = 24
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
