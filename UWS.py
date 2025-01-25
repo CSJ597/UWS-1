@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 15  #  PM
-RUN_MINUTE = 12
+RUN_MINUTE = 19
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -461,8 +461,8 @@ class MarketAnalysis:
             # Get the current date
             current_date = datetime.now().strftime("%Y-%m-%d")
             
-            # Create the report header
-            report = f"💸UWS Update: {current_date}\n{'─' * 30}\n\n"
+            # Create the report header / date
+            report = f" {current_date}\n{'─' * 30}\n\n"
             
             chart = None
             
