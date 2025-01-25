@@ -22,8 +22,8 @@ DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 11  # 5 PM
-RUN_MINUTE = 58
+RUN_HOUR = 12  # 5 PM
+RUN_MINUTE = 00
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -38,7 +38,7 @@ def wait_until_next_run():
         target += timedelta(days=1)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
     
     # Calculate sleep duration
