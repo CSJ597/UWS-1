@@ -22,8 +22,8 @@ DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 14  #  PM
-RUN_MINUTE = 56
+RUN_HOUR = 15  #  PM
+RUN_MINUTE = 6
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -427,7 +427,10 @@ class MarketAnalysis:
     def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None):
         """Send a message to Discord with optional chart image"""
         try:
-            payload = {'content': message}
+            payload = {
+                'content': message,
+                'username': 'Underground Wall Street 🏦'  # Change this to your desired name
+            }
             files = {}
             
             if chart_base64:
