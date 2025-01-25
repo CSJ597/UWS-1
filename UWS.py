@@ -253,7 +253,7 @@ class MarketAnalysis:
                     
                     # Only include events within next 30 minutes
                     time_until_event = (event_datetime - now).total_seconds() / 60
-                    if 0 <= time_until_event <= 30:
+                    if 0 <= time_until_event <= 1440:
                         # Get event details
                         currency = event.find('td', class_='calendar__currency').text.strip()
                         title = event.find('span', class_='calendar__event-title').text.strip()
@@ -468,7 +468,7 @@ class MarketAnalysis:
             current_date = datetime.now().strftime("%Y-%m-%d")
             
             # Create the report header
-            report = f"MARKET ANALYSIS: {current_date}\n{'─' * 30}\n\n"
+            report = f"💸UWS Update: {current_date}\n{'─' * 30}\n\n"
             
             chart = None
             
@@ -493,13 +493,13 @@ class MarketAnalysis:
                     prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
                 
                 # Format news events
-                news_section = "\nUPCOMING NEWS\n"
+                news_section = "\n🗂️UPCOMING NEWS\n"
                 if analysis.get('news_events'):
                     for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
                         impact_emoji = "🚨" if event['impact'] == "High" else "⚠️"
                         news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
                 else:
-                    news_section += "• No high-impact news events in next 30 minutes\n"
+                    news_section += "• No high-impact news events today\n"
                 
                 # Add recent market headlines
                 if analysis.get('market_news'):
@@ -537,7 +537,7 @@ class MarketAnalysis:
             return f"Error generating report: {str(e)}", None
 
 def main():
-    """Main execution function for market analysis"""
+    """Main execution function for sis"""
     market = MarketAnalysis()
     
     while True:
@@ -547,7 +547,7 @@ def main():
             
             # Log start time
             start_time = datetime.now(pytz.timezone('US/Eastern'))
-            logging.info(f"Starting market analysis at {start_time}")
+            logging.info(f"Starting sis at {start_time}")
             
             # Run analysis
             analysis_results = [market.analyze_market()]
@@ -561,7 +561,7 @@ def main():
             logging.info("Analysis complete")
             
         except Exception as e:
-            logging.error(f"Market analysis error: {str(e)}")
+            logging.error(f"sis error: {str(e)}")
             time.sleep(60)  # Wait a minute before retrying on error
 
 if __name__ == "__main__":
