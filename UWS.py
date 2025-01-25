@@ -381,7 +381,7 @@ REQUIRED OUTPUT:
                     }
                 ],
                 "temperature": 0.8,  # Slightly lower temperature for more consistent analysis
-                "max_tokens": 300  # Slightly higher to accommodate detailed analysis
+                "max_tokens": 200  # Slightly higher to accommodate detailed analysis
             }
         
         except Exception as e:
