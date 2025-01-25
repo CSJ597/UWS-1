@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 13  #  PM
-RUN_MINUTE = 1
+RUN_MINUTE = 7
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -313,10 +313,10 @@ class MarketAnalysis:
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
-        Generate a comprehensive market analysis prompt with forecast and position
+        Generate a concise market analysis prompt
         
         Args:
-            market_data (dict): Comprehensive market data
+            market_data (dict): Market data
             news_events (list): Upcoming high-impact news events
             market_news (list): Recent market headlines
         
@@ -324,31 +324,21 @@ class MarketAnalysis:
             dict: Structured prompt payload for AI analysis
         """
         try:
-            # Create comprehensive market context
-            market_info = (f"Current Price: ${market_data['current_price']:.2f}\n"
-                           f"Daily Change: {market_data['daily_change']:.2f}%\n"
-                           f"Market Trend: {market_data['market_trend']}\n"
-                           f"Volatility: {market_data['volatility']:.2f}%")
-
-            # Add key event if available
-            event_info = ""
-            if news_events:
-                next_event = sorted(news_events, key=lambda x: x['minutes_until'])[0]
-                event_info = f"Next High-Impact Event: {next_event['event']} in {next_event['minutes_until']} minutes."
+            # Create concise market context
+            market_info = (f"Price: ${market_data['current_price']:.2f}, "
+                           f"Change: {market_data['daily_change']:.2f}%, "
+                           f"Trend: {market_data['market_trend']}")
 
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a market analyst. Provide a detailed analysis and forecast for the ES market."
+                    "content": "You are a market analyst. Provide a detailed analysis based on the chart data."
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"Analyze the following market data:\n{market_info}\n{event_info}\n\n"
-                        "Please provide a structured response with:\n"
-                        "- Key insights\n"
-                        "- Forecast for the next hour\n"
-                        "- Suggested trading positions based on the analysis."
+                        f"Analyze the following chart data:\n{market_info}\n\n"
+                        "Provide:\n- Key insights from the chart\n- Forecast based on chart patterns\n- Suggested trading positions."
                     )
                 }
             ]
