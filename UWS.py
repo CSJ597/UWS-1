@@ -19,20 +19,25 @@ logging.basicConfig(level=logging.INFO)
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
+# Target run time in Eastern Time (24-hour format)
+RUN_HOUR = 11  # 5 PM
+RUN_MINUTE = 37
+
 def wait_until_next_run():
-    """Wait until the next scheduled run (5:30 PM on weekdays)"""
+    """Wait until the next scheduled run time on weekdays.
+    Currently set to run at {RUN_HOUR}:{RUN_MINUTE:02d} Eastern Time"""
     et_tz = pytz.timezone('US/Eastern')
     now = datetime.now(et_tz)
     
-    # Set target time to 5:30 PM today
-    target = now.replace(hour=18, minute=38, second=0, microsecond=0)
+    # Set target time using the configured hour and minute
+    target = now.replace(hour=RUN_HOUR, minute=RUN_MINUTE, second=0, microsecond=0)
     
-    # If we're past 5:30 PM, move to next day
+    # If we're past today's run time, move to next day
     if now > target:
         target += timedelta(days=1)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
     
     # Calculate sleep duration
