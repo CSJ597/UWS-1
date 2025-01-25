@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 11  # 5 PM
-RUN_MINUTE = 55
+RUN_MINUTE = 58
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -394,13 +394,6 @@ REQUIRED OUTPUT:
             # Existing data gathering steps remain the same
             news_events = self.check_high_impact_news()
             market_news = self.get_marketwatch_news()
-
-    def analyze_market(self, symbol='ES=F'):
-        """Comprehensive market analysis with enhanced AI prompt"""
-        try:
-            # Existing data gathering steps remain the same
-            news_events = self.check_high_impact_news()
-            market_news = self.get_marketwatch_news()
             
             # Get data
             ticker = yf.Ticker(symbol)
@@ -409,11 +402,9 @@ REQUIRED OUTPUT:
             if data.empty:
                 return {'error': 'No data available'}
             
-            # Existing analysis calculations...
             close_prices = data['Close']
             returns = close_prices.pct_change()
             
-            # Previous analysis calculations remain the same...
             analysis = {
                 'symbol': 'ES',
                 'current_price': close_prices.iloc[-1],
