@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 14  #  PM
-RUN_MINUTE = 24
+RUN_MINUTE = 41
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -424,36 +424,13 @@ class MarketAnalysis:
             logging.error(f"Market analysis error: {str(e)}")
             raise
 
-    def send_discord_message(self, webhook_url, message, chart_base64=None):
+    def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url="https://i.ibb.co/3N2NV0C/UWS-B-2.png"):
         """Send a message to Discord with optional chart image"""
         try:
-            # Prepare the message data
-            data = {
-                "content": message[:1900] + "..." if len(message) > 1900 else message,  # Discord has a 2000 char limit
-                "username": "UWS Market Analysis"
-            }
-            
-            files = {}
-            
-            # If we have a chart, add it as a file
+            payload = {'content': message[:1900] + "..." if len(message) > 1900 else message, 'username': "UWS Market Analysis", 'avatar_url': avatar_url}
             if chart_base64:
-                try:
-                    # Decode base64 string to bytes
-                    chart_bytes = base64.b64decode(chart_base64)
-                    
-                    # Create file object
-                    files = {
-                        'file': ('chart.png', chart_bytes, 'image/png')
-                    }
-                except Exception as e:
-                    logging.error(f"Error processing chart image: {str(e)}")
-            
-            # Send the message
-            if files:
-                response = requests.post(webhook_url, data=data, files=files)
-            else:
-                response = requests.post(webhook_url, json=data)
-            
+                payload['file'] = ('chart.png', base64.b64decode(chart_base64), 'image/png')
+            response = requests.post(webhook_url, json=payload)
             response.raise_for_status()
             logging.info("Discord message sent successfully")
             
@@ -556,7 +533,11 @@ def main():
             report, chart = market.generate_market_report(analysis_results)
             
             # Send to Discord
-            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart)
+            webhook_url = "YOUR_DISCORD_WEBHOOK_URL"
+            message = "Here is the latest market analysis!"
+            chart_base64 = "BASE64_ENCODED_CHART_IMAGE"  # Optional, if you have a chart to send
+            avatar_url = "https://i.ibb.co/3N2NV0C/UWS-B-2.png"  # URL to your profile picture
+            market.send_discord_message(webhook_url, message, chart_base64=chart_base64, avatar_url=avatar_url)
             
             logging.info("Analysis complete")
             
