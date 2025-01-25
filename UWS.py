@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 12  #  PM
-RUN_MINUTE = 53
+RUN_MINUTE = 14
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -313,7 +313,7 @@ class MarketAnalysis:
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
-        Generate a sophisticated, data-driven market analysis prompt
+        Generate a simplified market analysis prompt
         
         Args:
             market_data (dict): Comprehensive market data
@@ -324,68 +324,31 @@ class MarketAnalysis:
             dict: Structured prompt payload for AI analysis
         """
         try:
-            # Prepare technical context
-            technical_context = f"""
-TECHNICAL SNAPSHOT:
-- Current Price: ${market_data['current_price']:.2f}
-- Day's Range: ${market_data['session_low']:.2f} - ${market_data['session_high']:.2f}
-- Daily Change: {market_data['daily_change']:.2f}%
-- Volatility: {market_data['volatility']:.2f}%
-- Market Trend: {market_data['market_trend']}
-"""
-            
-            # Prepare news context
-            news_context = "MARKET CATALYSTS:\n"
-            if news_events:
-                for event in sorted(news_events, key=lambda x: x['minutes_until'])[:2]:
-                    news_context += f"- {event['impact']} Impact: {event['currency']} {event['event']} in {event['minutes_until']}m\n"
-            
-            if market_news:
-                news_context += "\nRECENT HEADLINES:\n"
-                for news in market_news[:2]:
-                    news_context += f"- {news['title']}\n"
-            
-            # Construct comprehensive prompt
-            prompt_content = f"""
-YOU ARE: A professional quantitative market analyst performing a surgical market analysis.
+            # Create minimal market context
+            market_info = (f"ES ${market_data['current_price']:.2f} "
+                          f"{market_data['daily_change']:.2f}% "
+                          f"{market_data['market_trend']}")
 
-{technical_context}
+            messages = [
+                {
+                    "role": "system",
+                    "content": "ES analysis"
+                },
+                {
+                    "role": "user",
+                    "content": market_info
+                }
+            ]
 
-{news_context}
-
-ANALYSIS DIRECTIVE:
-1. Dissect price action with mathematical precision
-2. Identify immediate market structure
-3. Assess probabilistic trading scenarios
-4. Highlight critical support/resistance levels
-5. Determine actionable trading bias
-
-REQUIRED OUTPUT:
-- Maximum 250 words
-- Use precise numerical references
-- Provide probabilistic outcome scenarios
-- Include specific entry/exit considerations
-- Focus on high-probability market movements
-"""
-            
             return {
-                "model": "gpt-4",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are an elite quantitative market analyst providing high-precision market intelligence."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt_content
-                    }
-                ],
-                "temperature": 0.8,  # Slightly lower temperature for more consistent analysis
-                "max_tokens": 200  # Slightly higher to accommodate detailed analysis
+                "model": "gpt-3.5-turbo",
+                "messages": messages,
+                "temperature": 0.8,
+                "max_tokens": 200
             }
         
         except Exception as e:
-            logging.error(f"Error generating advanced prompt: {str(e)}")
+            logging.error(f"Error generating prompt: {str(e)}")
             return None
 
     def analyze_market(self, symbol='ES=F'):
