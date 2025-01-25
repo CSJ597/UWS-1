@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 12  #  PM
-RUN_MINUTE = 12
+RUN_MINUTE = 41
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -380,7 +380,7 @@ REQUIRED OUTPUT:
                         "content": prompt_content
                     }
                 ],
-                "temperature": 0.6,  # Slightly lower temperature for more consistent analysis
+                "temperature": 0.8,  # Slightly lower temperature for more consistent analysis
                 "max_tokens": 300  # Slightly higher to accommodate detailed analysis
             }
         
