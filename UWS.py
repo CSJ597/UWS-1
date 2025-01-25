@@ -22,8 +22,8 @@ DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 12  #  PM
-RUN_MINUTE = 56
+RUN_HOUR = 13  #  PM
+RUN_MINUTE = 1
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -313,7 +313,7 @@ class MarketAnalysis:
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
-        Generate a simplified market analysis prompt
+        Generate a comprehensive market analysis prompt with forecast and position
         
         Args:
             market_data (dict): Comprehensive market data
@@ -324,27 +324,40 @@ class MarketAnalysis:
             dict: Structured prompt payload for AI analysis
         """
         try:
-            # Create minimal market context
-            market_info = (f"ES ${market_data['current_price']:.2f} "
-                          f"{market_data['daily_change']:.2f}% "
-                          f"{market_data['market_trend']}")
+            # Create comprehensive market context
+            market_info = (f"Current Price: ${market_data['current_price']:.2f}\n"
+                           f"Daily Change: {market_data['daily_change']:.2f}%\n"
+                           f"Market Trend: {market_data['market_trend']}\n"
+                           f"Volatility: {market_data['volatility']:.2f}%")
+
+            # Add key event if available
+            event_info = ""
+            if news_events:
+                next_event = sorted(news_events, key=lambda x: x['minutes_until'])[0]
+                event_info = f"Next High-Impact Event: {next_event['event']} in {next_event['minutes_until']} minutes."
 
             messages = [
                 {
                     "role": "system",
-                    "content": "ES analysis"
+                    "content": "You are a market analyst. Provide a detailed analysis and forecast for the ES market."
                 },
                 {
                     "role": "user",
-                    "content": market_info
+                    "content": (
+                        f"Analyze the following market data:\n{market_info}\n{event_info}\n\n"
+                        "Please provide a structured response with:\n"
+                        "- Key insights\n"
+                        "- Forecast for the next hour\n"
+                        "- Suggested trading positions based on the analysis."
+                    )
                 }
             ]
 
             return {
                 "model": "gpt-3.5-turbo",
                 "messages": messages,
-                "temperature": 0.8,
-                "max_tokens": 200
+                "temperature": 0.3,
+                "max_tokens": 300  # Allow for more detailed response
             }
         
         except Exception as e:
