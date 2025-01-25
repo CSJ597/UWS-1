@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 13  #  PM
-RUN_MINUTE = 28
+RUN_MINUTE = 35
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -327,19 +327,21 @@ class MarketAnalysis:
             # Prepare concise technical context
             technical_context = (f"Price: ${market_data['current_price']:.2f}, "
                                  f"Change: {market_data['daily_change']:.2f}%, "
-                                 f"Trend: {market_data['market_trend']}")
+                                 f"Trend: {market_data['market_trend']}, "
+                                 f"Volatility: {market_data['volatility']:.2f}%")
 
             # Construct the prompt
             prompt_content = (
-                f"Analyze the chart data:\n{technical_context}\n\n"
-                "Provide actionable insights for scalping:\n"
-                "- Insights\n- Forecast\n- Suggested positions."
+                f"Analyze the chart data for scalping:\n{technical_context}\n\n"
+                "Provide:\n- Advanced insights (avoid basic explanations)\n"
+                "- Quick scalping forecast\n"
+                "- Suggested positions for immediate trades."
             )
 
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a market analyst. Provide a detailed analysis based on the chart data, focusing on scalping strategies."
+                    "content": "You are a market analyst specializing in scalping strategies and chart analysis."
                 },
                 {
                     "role": "user",
