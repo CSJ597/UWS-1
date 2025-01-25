@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 14  #  PM
-RUN_MINUTE = 15
+RUN_MINUTE = 19
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -333,7 +333,7 @@ class MarketAnalysis:
             # Construct the prompt
             prompt_content = (
                 f"Analyze the chart data:\n{technical_context}\n\n"
-                "Provide:\n- Insights\n- Forecast\n- Suggested positions."
+                "Provide:\n- Insights\n- Forecast\"
             )
 
             messages = [
