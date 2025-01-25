@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 15  #  PM
-RUN_MINUTE = 8
+RUN_MINUTE = 12
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -429,9 +429,12 @@ class MarketAnalysis:
         try:
             payload = {
                 'content': message,
-                'username': 'Underground Wall Street 🏦'  # Change this to your desired name
+                'username': 'Underground Wall Street 🏦'
             }
             files = {}
+            
+            # Log the payload and message length
+            logging.info(f"Sending Discord message with length {len(message)}: {message}")
             
             if chart_base64:
                 # Decode base64 string to bytes
