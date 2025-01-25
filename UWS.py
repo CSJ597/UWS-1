@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 14  #  PM
-RUN_MINUTE = 51
+RUN_MINUTE = 55
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -427,12 +427,21 @@ class MarketAnalysis:
     def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None):
         """Send a message to Discord with optional chart image"""
         try:
-            payload = {'content': message[:1900] + "..." if len(message) > 1900 else message, 'username': "UWS Market Analysis"}
+            payload = {'content': message}
+            files = {}
+            
             if chart_base64:
-                payload['file'] = ('chart.png', base64.b64decode(chart_base64), 'image/png')
+                # Decode base64 string to bytes
+                chart_bytes = base64.b64decode(chart_base64)
+                files = {
+                    'file': ('chart.png', chart_bytes, 'image/png')
+                }
+            
             if avatar_url:
                 payload['avatar_url'] = avatar_url
-            response = requests.post(webhook_url, json=payload)
+            
+            # Send the message
+            response = requests.post(webhook_url, data=payload, files=files)
             response.raise_for_status()
             logging.info("Discord message sent successfully")
             
