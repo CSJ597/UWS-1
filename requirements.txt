@@ -8,3 +8,4 @@ openai>=1.0.0
 mplfinance>=0.12.10b0
 beautifulsoup4>=4.12.0
 pytz>=2023.3
+finlight-client==1.0.0
