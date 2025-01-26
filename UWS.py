@@ -24,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 34
+RUN_MINUTE = 39
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -375,14 +375,15 @@ class MarketAnalysis:
                             'Content-Type': 'application/json'
                         }
                         
-                        # Make direct API call
-                        url = 'https://api.finlight.me/articles/extended'
+                        # Make direct API call for extended articles
+                        url = 'https://api.finlight.me/v1/articles/extended'
                         response = requests.post(url, headers=headers, json={
                             'query': query,
                             'language': 'en',
                             'limit': 10,
                             'sort': 'publishedAt',
-                            'order': 'desc'
+                            'order': 'desc',
+                            'include': ['title', 'summary', 'keyFacts', 'assetImpacts', 'sentiment']
                         })
                         response.raise_for_status()
                         
@@ -426,12 +427,34 @@ class MarketAnalysis:
                     reverse=True
                 )[:3]  # Get top 3 articles
 
-                # Send each article as an embed
+                # Send each article as an embed with extended information
                 if articles:
                     for article in articles:
+                        # Format key facts and asset impacts if available
+                        key_facts = article.get('keyFacts', [])
+                        key_facts_text = '\n'.join([f'• {fact}' for fact in key_facts]) if key_facts else ''
+                        
+                        asset_impacts = article.get('assetImpacts', [])
+                        asset_impacts_text = '\n'.join([f'• {impact}' for impact in asset_impacts]) if asset_impacts else ''
+                        
+                        # Get sentiment if available
+                        sentiment = article.get('sentiment', {})
+                        sentiment_text = f"Sentiment: {sentiment.get('score', 'N/A')} ({sentiment.get('label', 'N/A')})" if sentiment else ''
+                        
+                        # Build description with all available information
+                        description = []
+                        if article.get('summary'):
+                            description.append(f"📝 **Summary**\n{article['summary']}")
+                        if key_facts_text:
+                            description.append(f"\n🔑 **Key Facts**\n{key_facts_text}")
+                        if asset_impacts_text:
+                            description.append(f"\n💹 **Asset Impacts**\n{asset_impacts_text}")
+                        if sentiment_text:
+                            description.append(f"\n🎯 **{sentiment_text}**")
+                        
                         embed = {
                             'title': article.get('title', 'No Title'),
-                            'description': article.get('summary', article.get('description', 'No summary available')),
+                            'description': '\n\n'.join(description) or 'No summary available',
                             'url': article.get('url', article.get('link', '')),
                             'color': 3447003,  # Blue
                             'fields': [
