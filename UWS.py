@@ -20,10 +20,11 @@ logging.basicConfig(level=logging.INFO,
 # Configuration (Replace with your actual values)
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
+FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15bfc6e52"  # Add your Finlight API key here
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 19  #  PM
-RUN_MINUTE = 54
+RUN_HOUR = 20  #  PM
+RUN_MINUTE = 0
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -275,41 +276,70 @@ class MarketAnalysis:
         except Exception as e:
             logging.error(f"Error checking news: {str(e)}")
             return []
-            
-    def get_marketwatch_news(self):
-        """Scrape recent news from MarketWatch"""
+
+    def analyze_market(self, symbol='ES=F'):
+        """Comprehensive market analysis with enhanced AI prompt"""
         try:
-            url = 'https://www.marketwatch.com/markets'
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            # Get high-impact news events
+            news_events = self.check_high_impact_news()
+            
+            # Get data
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period="1d", interval="1m")
+            
+            if data.empty:
+                return {'error': 'No data available'}
+            
+            close_prices = data['Close']
+            returns = close_prices.pct_change()
+            
+            analysis = {
+                'symbol': 'ES',
+                'current_price': close_prices.iloc[-1],
+                'daily_change': ((close_prices.iloc[-1] - close_prices.iloc[0]) / close_prices.iloc[0]) * 100,
+                'volatility': float(np.std(returns.dropna().values) * np.sqrt(252) * 100),
+                'market_trend': self.identify_market_trend(data),
+                'technical_chart': self.generate_technical_chart(data, 'ES'),
+                'session_high': data['High'].iloc[0],
+                'session_low': data['Low'].iloc[0],
+                'prev_close': data['Close'].iloc[-2] if len(data) > 1 else None,
+                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
+                'news_events': news_events
             }
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
             
-            news_items = []
-            article_elements = soup.find_all('div', class_='article__content')
+            # Generate advanced prompt
+            ai_prompt = self._generate_advanced_prompt(analysis, news_events, None)
             
-            for article in article_elements[:5]:  # Get latest 5 news items
-                title_elem = article.find('h3', class_='article__headline')
-                snippet_elem = article.find('p', class_='article__summary')
-                time_elem = article.find('span', class_='article__timestamp')
-                
-                if title_elem and snippet_elem and time_elem:
-                    title = title_elem.text.strip()
-                    snippet = snippet_elem.text.strip()
-                    timestamp = time_elem.text.strip()
+            # AI Analysis with enhanced prompt
+            ai_analysis = ""
+            try:
+                if ai_prompt:
+                    response = requests.post(
+                        'https://api.aimlapi.com/v1/chat/completions',
+                        json=ai_prompt,
+                        headers={'Authorization': f'Bearer {API_KEY}'}
+                    )
                     
-                    news_items.append({
-                        'title': title,
-                        'snippet': snippet,
-                        'time': timestamp
-                    })
+                    if response.status_code in [200, 201]:
+                        ai_analysis = response.json()['choices'][0]['message']['content'].strip()
+                    else:
+                        ai_analysis = "Unable to generate AI analysis. API returned an error."
+                        logging.error(f"API Error: {response.text}")
+                
+            except Exception as e:
+                ai_analysis = f"Analysis Error: {str(e)}"
+                logging.error(f"Error getting AI analysis: {str(e)}")
             
-            return news_items
+            # Update analysis with AI response
+            analysis.update({
+                'ai_analysis': f"\n{ai_analysis}\n"
+            })
+            
+            return analysis
             
         except Exception as e:
-            logging.error(f"Error fetching MarketWatch news: {str(e)}")
-            return []
+            logging.error(f"Market analysis error: {str(e)}")
+            raise
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
@@ -317,7 +347,7 @@ class MarketAnalysis:
         
         Args:
             market_data (dict): Comprehensive market data
-            news_events (list): Upcoming high-impact news events (not used)
+            news_events (list): Upcoming high-impact news events
             market_news (list): Recent market headlines (not used)
         
         Returns:
@@ -358,71 +388,74 @@ class MarketAnalysis:
             logging.error(f"Error generating prompt: {str(e)}")
             return None
 
-    def analyze_market(self, symbol='ES=F'):
-        """Comprehensive market analysis with enhanced AI prompt"""
+    def generate_market_report(self, analysis_results):
+        """Generate a comprehensive market report"""
         try:
-            # Existing data gathering steps remain the same
-            news_events = self.check_high_impact_news()
-            market_news = self.get_marketwatch_news()
+            # Get the current date
+            current_date = datetime.now().strftime("%Y-%m-%d")
             
-            # Get data
-            ticker = yf.Ticker(symbol)
-            data = ticker.history(period="1d", interval="1m")
+            # Create the report header / date
+            report = f" {current_date}\n{'─' * 30}\n\n"
             
-            if data.empty:
-                return {'error': 'No data available'}
+            chart = None
             
-            close_prices = data['Close']
-            returns = close_prices.pct_change()
-            
-            analysis = {
-                'symbol': 'ES',
-                'current_price': close_prices.iloc[-1],
-                'daily_change': ((close_prices.iloc[-1] - close_prices.iloc[0]) / close_prices.iloc[0]) * 100,
-                'volatility': float(np.std(returns.dropna().values) * np.sqrt(252) * 100),
-                'market_trend': self.identify_market_trend(data),
-                'technical_chart': self.generate_technical_chart(data, 'ES'),
-                'session_high': data['High'].iloc[0],
-                'session_low': data['Low'].iloc[0],
-                'prev_close': data['Close'].iloc[-2] if len(data) > 1 else None,
-                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
-                'news_events': news_events,
-                'market_news': market_news
-            }
-            
-            # Generate advanced prompt
-            ai_prompt = self._generate_advanced_prompt(analysis, news_events, market_news)
-            
-            # AI Analysis with enhanced prompt
-            ai_analysis = ""
-            try:
-                if ai_prompt:
-                    response = requests.post(
-                        'https://api.aimlapi.com/v1/chat/completions',
-                        json=ai_prompt,
-                        headers={'Authorization': f'Bearer {API_KEY}'}
-                    )
-                    
-                    if response.status_code in [200, 201]:
-                        ai_analysis = response.json()['choices'][0]['message']['content'].strip()
-                    else:
-                        ai_analysis = "Unable to generate AI analysis. API returned an error."
-                        logging.error(f"API Error: {response.text}")
+            for analysis in analysis_results:
+                if 'error' in analysis:
+                    report += f"Error: {analysis['error']}\n\n"
+                    continue
                 
-            except Exception as e:
-                ai_analysis = f"Analysis Error: {str(e)}"
-                logging.error(f"Error getting AI analysis: {str(e)}")
+                # Trading Insights
+                volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
+                
+                # Calculate price position relative to day's range
+                price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
+                
+                # Format price position description
+                range_position = "NEAR HIGH" if price_position > 75 else "NEAR LOW" if price_position < 25 else "MID-RANGE"
+                
+                # Calculate change from previous close if available
+                prev_close_info = ""
+                if analysis['prev_close']:
+                    change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
+                    prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
+                
+                # Format news events
+                news_section = "\n🗂️UPCOMING NEWS\n"
+                if analysis.get('news_events'):
+                    for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
+                        impact_emoji = "🚨" if event['impact'] == "High" else "⚠️"
+                        news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
+                else:
+                    news_section += "• No high-impact news events today\n"
+                
+                report += f"""
+📊 PRICE ACTION
+• Current: ${analysis['current_price']:.2f} ({range_position})
+• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
+{prev_close_info}
+• Daily Change: {analysis['daily_change']:.2f}%
+
+📈 MARKET CONDITIONS
+• Trend: {analysis['market_trend']}
+• Volatility: {volatility_status}
+• Momentum: {abs(analysis['daily_change']):.1f}%
+
+{news_section}
+
+🔍 ANALYSIS
+{analysis['ai_analysis']}
+
+{'─' * 40}
+"""
+                
+                # Add chart image if present
+                chart = analysis.get('technical_chart', None)
             
-            # Update analysis with AI response
-            analysis.update({
-                'ai_analysis': f"\n{ai_analysis}\n"
-            })
-            
-            return analysis
+            return report, chart
             
         except Exception as e:
-            logging.error(f"Market analysis error: {str(e)}")
-            raise
+            logging.error(f"Error generating report: {str(e)}")
+            return f"Error generating report: {str(e)}", None
 
     def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None, news_articles=None):
         """Send a message to Discord with optional chart image and news articles"""
@@ -489,81 +522,6 @@ class MarketAnalysis:
             logging.error(f"Failed to send Discord message: {str(e)}")
             raise
 
-    def generate_market_report(self, analysis_results):
-        """Generate a comprehensive market report"""
-        try:
-            # Get the current date
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            
-            # Create the report header / date
-            report = f" {current_date}\n{'─' * 30}\n\n"
-            
-            chart = None
-            
-            for analysis in analysis_results:
-                if 'error' in analysis:
-                    report += f"Error: {analysis['error']}\n\n"
-                    continue
-                
-                # Trading Insights
-                volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
-                
-                # Calculate price position relative to day's range
-                price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
-                
-                # Format price position description
-                range_position = "NEAR HIGH" if price_position > 75 else "NEAR LOW" if price_position < 25 else "MID-RANGE"
-                
-                # Calculate change from previous close if available
-                prev_close_info = ""
-                if analysis['prev_close']:
-                    change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-                    prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
-                
-                # Format news events
-                news_section = "\n🗂️UPCOMING NEWS\n"
-                if analysis.get('news_events'):
-                    for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
-                        impact_emoji = "🚨" if event['impact'] == "High" else "⚠️"
-                        news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
-                else:
-                    news_section += "• No high-impact news events today\n"
-                
-                # Add recent market headlines
-                if analysis.get('market_news'):
-                    news_section += "\nRECENT HEADLINES\n"
-                    for news in analysis['market_news'][:3]:
-                        news_section += f"• {news['title']} ({news['time']})\n"
-                
-                report += f"""
-📊 PRICE ACTION
-• Current: ${analysis['current_price']:.2f} ({range_position})
-• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
-{prev_close_info}
-• Daily Change: {analysis['daily_change']:.2f}%
-
-📈 MARKET CONDITIONS
-• Trend: {analysis['market_trend']}
-• Volatility: {volatility_status}
-• Momentum: {abs(analysis['daily_change']):.1f}%
-
-{news_section}
-
-🔍 ANALYSIS
-{analysis['ai_analysis']}
-
-{'─' * 40}
-"""
-                
-                # Add chart image if present
-                chart = analysis.get('technical_chart', None)
-            
-            return report, chart
-            
-        except Exception as e:
-            logging.error(f"Error generating report: {str(e)}")
-            return f"Error generating report: {str(e)}", None
-
 def main():
     try:
         logging.info("Starting market analysis")
@@ -576,28 +534,75 @@ def main():
             # Generate report and chart
             report, chart = market.generate_market_report(analysis_results)
             
-            # Get news articles from the analysis results
-            news_articles = []
-            if analysis_results[0].get('market_news'):
-                news_articles = [
-                    {
-                        'title': news['title'],
-                        'description': news.get('summary', ''),
-                        'source': news.get('source', 'Market News'),
-                        'url': news.get('url', ''),
-                        'time': news.get('time', '')
-                    }
-                    for news in analysis_results[0]['market_news'][:3]
-                ]
-            
-            # Send to Discord with news articles
+            # First send market analysis
             market.send_discord_message(
                 DISCORD_WEBHOOK_URL,
                 report,
                 chart,
-                avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png',
-                news_articles=news_articles
+                avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png'
             )
+            
+            # Get articles from Finlight API
+            try:
+                client = FinlightApi({ 'apiKey': FINLIGHT_API_KEY })
+                articles = []
+                
+                # Get articles for each search query
+                for query in ['S&P 500', 'ES futures', 'SPX']:
+                    response = client.articles.getExtendedArticles({
+                        'params': {
+                            'query': query,
+                            'language': "en"
+                        }
+                    })
+                    
+                    if response and (isinstance(response, list) or response.get('articles')):
+                        articles.extend(response if isinstance(response, list) else response.get('articles', []))
+                
+                # Remove duplicates and sort by date
+                seen_urls = set()
+                unique_articles = []
+                for article in articles:
+                    url = article.get('url', '')
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        unique_articles.append({
+                            'title': article.get('title', ''),
+                            'description': article.get('summary', ''),
+                            'source': article.get('source', 'Finlight'),
+                            'url': url,
+                            'time': article.get('publishedAt', '')
+                        })
+                
+                # Send the top 3 articles to Discord
+                if unique_articles:
+                    news_payload = {
+                        'username': 'Underground Wall Street 🏦',
+                        'embeds': []
+                    }
+                    
+                    for article in sorted(unique_articles, key=lambda x: x['time'], reverse=True)[:3]:
+                        news_payload['embeds'].append({
+                            'title': f"📰 {article['title']}",
+                            'description': article['description'],
+                            'url': article['url'],
+                            'color': 15105570,  # Orange
+                            'fields': [
+                                {
+                                    'name': 'Source',
+                                    'value': article['source'],
+                                    'inline': True
+                                }
+                            ]
+                        })
+                    
+                    if news_payload['embeds']:
+                        response = requests.post(DISCORD_WEBHOOK_URL, json=news_payload)
+                        response.raise_for_status()
+                        logging.info("Sent Finlight articles to Discord")
+                
+            except Exception as e:
+                logging.error(f"Error getting Finlight articles: {str(e)}")
             
             logging.info("Analysis complete")
             
