@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 
-# Configure logging
+# Anything before this - Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -22,8 +22,8 @@ DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2
 API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 15  #  PM
-RUN_MINUTE = 22
+RUN_HOUR = 19  #  PM
+RUN_MINUTE = 45
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -424,20 +424,44 @@ class MarketAnalysis:
             logging.error(f"Market analysis error: {str(e)}")
             raise
 
-    def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None):
-        """Send a message to Discord with optional chart image"""
+    def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None, news_articles=None):
+        """Send a message to Discord with optional chart image and news articles"""
         try:
+            embeds = []
+            
+            # Add market analysis as first embed
+            embeds.append({
+                'title': '🎯 Market Analysis',
+                'description': message,
+                'color': 3447003,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Add news articles if provided
+            if news_articles:
+                for article in news_articles[:3]:  # Limit to 3 articles
+                    embeds.append({
+                        'title': f"📰 {article.get('title', 'No Title')}",
+                        'description': article.get('summary', article.get('description', 'No summary available')),
+                        'url': article.get('url', article.get('link')),
+                        'color': 15105570,  # Orange
+                        'fields': [
+                            {
+                                'name': 'Source',
+                                'value': article.get('source', article.get('publisher', 'Unknown')),
+                                'inline': True
+                            }
+                        ]
+                    })
+            
             payload = {
-                'content': message,
-                'username': 'Underground Wall Street 🏦'
+                'username': 'Underground Wall Street 🏦',
+                'embeds': embeds
             }
+            
             files = {}
             
-            # Log the payload and message length
-            logging.info(f"Sending Discord message with length {len(message)}: {message}")
-            
             if chart_base64:
-                # Decode base64 string to bytes
                 chart_bytes = base64.b64decode(chart_base64)
                 files = {
                     'file': ('chart.png', chart_bytes, 'image/png')
@@ -447,9 +471,9 @@ class MarketAnalysis:
                 payload['avatar_url'] = avatar_url
             
             # Send the message
-            response = requests.post(webhook_url, data=payload, files=files)
+            response = requests.post(webhook_url, json=payload, files=files)
             response.raise_for_status()
-            logging.info("Discord message sent successfully")
+            logging.info("Discord message sent successfully with news updates")
             
         except Exception as e:
             logging.error(f"Failed to send Discord message: {str(e)}")
@@ -550,7 +574,7 @@ def main():
             report, chart = market.generate_market_report(analysis_results)
             
             # Send to Discord
-            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart, avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png')
+            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart, avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png', news_articles=analysis_results[0]['market_news'])
             
             logging.info("Analysis complete")
             
