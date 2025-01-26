@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 19  #  PM
-RUN_MINUTE = 49
+RUN_MINUTE = 52
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -448,31 +448,34 @@ class MarketAnalysis:
                         'fields': [
                             {
                                 'name': 'Source',
-                                'value': article.get('source', article.get('publisher', 'Unknown')),
+                                'value': article.get('source', 'Market News'),
                                 'inline': True
                             }
                         ]
                     })
             
+            # First, send the embeds
             payload = {
                 'username': 'Underground Wall Street 🏦',
                 'embeds': embeds
             }
             
-            files = {}
+            if avatar_url:
+                payload['avatar_url'] = avatar_url
             
+            # Send the text and embeds first
+            response = requests.post(webhook_url, json=payload)
+            response.raise_for_status()
+            
+            # Then, if we have a chart, send it as a follow-up message
             if chart_base64:
                 chart_bytes = base64.b64decode(chart_base64)
                 files = {
                     'file': ('chart.png', chart_bytes, 'image/png')
                 }
+                chart_response = requests.post(webhook_url, files=files)
+                chart_response.raise_for_status()
             
-            if avatar_url:
-                payload['avatar_url'] = avatar_url
-            
-            # Send the message
-            response = requests.post(webhook_url, json=payload, files=files)
-            response.raise_for_status()
             logging.info("Discord message sent successfully with news updates")
             
         except Exception as e:
