@@ -24,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 16
+RUN_MINUTE = 19
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -551,12 +551,10 @@ def main():
                 search_queries = ['S&P 500', 'ES futures', 'SPX']
                 for query in search_queries:
                     logging.info(f"Fetching articles for query: {query}")
-                    query_articles = client.articles.get_extended_articles({
-                        'params': {
-                            'query': query,
-                            'language': 'en'
-                        }
-                    })
+                    query_articles = client.articles.get_extended_articles(
+                        query=query,
+                        language='en'
+                    )
                     logging.info(f"Response type: {type(query_articles)}")
                     logging.info(f"Response content: {query_articles}")
                     
