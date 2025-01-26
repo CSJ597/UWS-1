@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 import finlight_client
+from io import BytesIO
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -23,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 8
+RUN_MINUTE = 11
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
