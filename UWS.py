@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 
-# Anything before this - Configure logging
+# Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 19  #  PM
-RUN_MINUTE = 45
+RUN_MINUTE = 49
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -38,7 +38,7 @@ def wait_until_next_run():
         target += timedelta(days=1)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
     
     # Calculate sleep duration
@@ -442,8 +442,8 @@ class MarketAnalysis:
                 for article in news_articles[:3]:  # Limit to 3 articles
                     embeds.append({
                         'title': f"📰 {article.get('title', 'No Title')}",
-                        'description': article.get('summary', article.get('description', 'No summary available')),
-                        'url': article.get('url', article.get('link')),
+                        'description': article.get('description', article.get('summary', 'No summary available')),
+                        'url': article.get('url', ''),
                         'color': 15105570,  # Orange
                         'fields': [
                             {
@@ -555,32 +555,45 @@ class MarketAnalysis:
             return f"Error generating report: {str(e)}", None
 
 def main():
-    """Main execution function for sis"""
-    market = MarketAnalysis()
-    
-    while True:
-        try:
-            # Wait until next scheduled run
-            wait_until_next_run()
-            
-            # Log start time
-            start_time = datetime.now(pytz.timezone('US/Eastern'))
-            logging.info(f"Starting sis at {start_time}")
-            
-            # Run analysis
-            analysis_results = [market.analyze_market()]
-            
-            # Generate report
+    try:
+        logging.info("Starting market analysis")
+        market = MarketAnalysis()
+        
+        # Run analysis for ES futures
+        analysis_results = [market.analyze_market()]
+        
+        if analysis_results:
+            # Generate report and chart
             report, chart = market.generate_market_report(analysis_results)
             
-            # Send to Discord
-            market.send_discord_message(DISCORD_WEBHOOK_URL, report, chart, avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png', news_articles=analysis_results[0]['market_news'])
+            # Get news articles from the analysis results
+            news_articles = []
+            if analysis_results[0].get('market_news'):
+                news_articles = [
+                    {
+                        'title': news['title'],
+                        'description': news.get('summary', ''),
+                        'source': news.get('source', 'Market News'),
+                        'url': news.get('url', ''),
+                        'time': news.get('time', '')
+                    }
+                    for news in analysis_results[0]['market_news'][:3]
+                ]
+            
+            # Send to Discord with news articles
+            market.send_discord_message(
+                DISCORD_WEBHOOK_URL,
+                report,
+                chart,
+                avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png',
+                news_articles=news_articles
+            )
             
             logging.info("Analysis complete")
             
-        except Exception as e:
-            logging.error(f"sis error: {str(e)}")
-            time.sleep(60)  # Wait a minute before retrying on error
+    except Exception as e:
+        logging.error(f"sis error: {str(e)}")
+        time.sleep(60)  # Wait a minute before retrying on error
 
 if __name__ == "__main__":
     main()
