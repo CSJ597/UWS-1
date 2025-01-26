@@ -24,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 15
+RUN_MINUTE = 16
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -547,31 +547,51 @@ def main():
                 client = finlight_client.FinlightApi({ 'apiKey': FINLIGHT_API_KEY })
                 articles = []
                 
+                # Get articles for each search query
                 search_queries = ['S&P 500', 'ES futures', 'SPX']
                 for query in search_queries:
+                    logging.info(f"Fetching articles for query: {query}")
                     query_articles = client.articles.get_extended_articles({
                         'params': {
                             'query': query,
                             'language': 'en'
                         }
                     })
+                    logging.info(f"Response type: {type(query_articles)}")
+                    logging.info(f"Response content: {query_articles}")
+                    
                     if isinstance(query_articles, list):
                         articles.extend(query_articles)
                     elif isinstance(query_articles, dict) and 'articles' in query_articles:
                         articles.extend(query_articles['articles'])
                 
+                logging.info(f"Total articles found: {len(articles)}")
+                
+                # Sort articles by date and get top 3
                 articles.sort(key=lambda x: x['publishedAt'], reverse=True)
                 top_articles = articles[:3]
                 
+                # Format articles for Discord with summaries
                 article_text = "\n\n**Recent Market News:**\n"
                 for article in top_articles:
-                    article_text += f"• [{article['title']}]({article['url']})\n"
+                    title = article.get('title', 'No Title')
+                    url = article.get('url', '')
+                    summary = article.get('summary', 'No summary available')
+                    source = article.get('source', 'Finlight')
+                    published = article.get('publishedAt', '')
+                    
+                    article_text += f"• **{title}**\n"
+                    article_text += f"  *Source: {source}*\n"
+                    article_text += f"  Summary: {summary}\n"
+                    article_text += f"  [Read more]({url})\n\n"
                 
+                # Send articles to Discord
                 market.send_discord_message(DISCORD_WEBHOOK_URL, article_text)
                 logging.info("Discord messages sent successfully in order: analysis, chart, news")
                 
             except Exception as e:
                 logging.error(f"Error getting Finlight articles: {str(e)}")
+                logging.error(f"Full error: {repr(e)}")
             
             logging.info("Analysis complete")
             
