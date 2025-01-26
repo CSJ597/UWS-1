@@ -19,12 +19,12 @@ logging.basicConfig(level=logging.INFO,
 
 # Configuration (Replace with your actual values)
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
+API_KEY = "e906d8579c6e48088664880e890ad89e"
 FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15bfc6e52"  # Add your Finlight API key here
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 25
+RUN_MINUTE = 29
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -360,7 +360,6 @@ class MarketAnalysis:
 
             # Get articles from Finlight API
             try:
-                client = finlight_client.FinlightApi({ 'apiKey': FINLIGHT_API_KEY })
                 articles = []
                 
                 # Send header for news section
@@ -370,24 +369,42 @@ class MarketAnalysis:
                 search_queries = ['S&P 500', 'ES futures', 'SPX', 'SPY ETF']
                 for query in search_queries:
                     try:
-                        response = client.articles.get_extended_articles({
-                            'params': {
-                                'query': query,
-                                'language': "en"
-                            }
-                        })
+                        # Create headers with API key
+                        headers = {
+                            'Authorization': f'Bearer {FINLIGHT_API_KEY}',
+                            'Content-Type': 'application/json'
+                        }
                         
-                        if isinstance(response, list):
-                            articles.extend(response)
-                        elif isinstance(response, dict):
-                            if 'articles' in response:
-                                articles.extend(response['articles'])
-                            elif 'data' in response:
-                                articles.extend(response['data'])
-                            elif 'results' in response:
-                                articles.extend(response['results'])
-                    except Exception as e:
+                        # Make direct API call
+                        url = 'https://api.finlight.me/v1/articles/extended'
+                        params = {
+                            'query': query,
+                            'language': 'en'
+                        }
+                        response = requests.get(url, headers=headers, params=params)
+                        response.raise_for_status()
+                        
+                        data = response.json()
+                        if isinstance(data, list):
+                            articles.extend(data)
+                        elif isinstance(data, dict):
+                            if 'articles' in data:
+                                articles.extend(data['articles'])
+                            elif 'data' in data:
+                                articles.extend(data['data'])
+                            elif 'results' in data:
+                                articles.extend(data['results'])
+                            
+                        time.sleep(1)  # Add delay between API calls
+                        
+                    except requests.exceptions.RequestException as e:
                         logging.error(f"Error searching for query '{query}': {str(e)}")
+                        if e.response is not None and e.response.status_code == 429:
+                            logging.warning("Rate limit reached, waiting before next request")
+                            time.sleep(60)  # Wait longer on rate limit
+                        continue
+                    except Exception as e:
+                        logging.error(f"Error processing query '{query}': {str(e)}")
                         continue
 
                 # Remove duplicates and sort by date
@@ -406,26 +423,29 @@ class MarketAnalysis:
                 )[:3]  # Get top 3 articles
 
                 # Send each article as an embed
-                for article in articles:
-                    embed = {
-                        'title': article.get('title', 'No Title'),
-                        'description': article.get('summary', article.get('description', 'No summary available')),
-                        'url': article.get('url', article.get('link', '')),
-                        'color': 3447003,  # Blue
-                        'fields': [
-                            {
-                                'name': 'Source',
-                                'value': article.get('source', article.get('publisher', 'Unknown')),
-                                'inline': True
-                            },
-                            {
-                                'name': 'Published',
-                                'value': datetime.fromisoformat(article.get('publishedAt', '').replace('Z', '+00:00')).strftime('%I:%M %p EST'),
-                                'inline': True
-                            }
-                        ]
-                    }
-                    self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[embed])
+                if articles:
+                    for article in articles:
+                        embed = {
+                            'title': article.get('title', 'No Title'),
+                            'description': article.get('summary', article.get('description', 'No summary available')),
+                            'url': article.get('url', article.get('link', '')),
+                            'color': 3447003,  # Blue
+                            'fields': [
+                                {
+                                    'name': 'Source',
+                                    'value': article.get('source', article.get('publisher', 'Unknown')),
+                                    'inline': True
+                                },
+                                {
+                                    'name': 'Published',
+                                    'value': datetime.fromisoformat(article.get('publishedAt', '').replace('Z', '+00:00')).strftime('%I:%M %p EST'),
+                                    'inline': True
+                                }
+                            ]
+                        }
+                        self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[embed])
+                else:
+                    self.send_discord_message(DISCORD_WEBHOOK_URL, "No new articles found at this time.")
 
                 logging.info("Discord messages sent successfully in order: analysis, chart, news")
                 
