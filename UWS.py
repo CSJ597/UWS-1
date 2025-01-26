@@ -27,7 +27,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 22 #  PM
-RUN_MINUTE = 16
+RUN_MINUTE = 22
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -40,10 +40,12 @@ def wait_until_next_run():
     # If we've already passed today's run time, move to tomorrow
     if now >= target:
         target += timedelta(days=1)
+        target = target.replace(hour=RUN_HOUR, minute=RUN_MINUTE, second=0, microsecond=0)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 5:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
+        target = target.replace(hour=RUN_HOUR, minute=RUN_MINUTE, second=0, microsecond=0)
     
     # Calculate sleep duration
     sleep_seconds = (target - now).total_seconds()
@@ -882,6 +884,9 @@ def main():
                 # Create MarketAnalysis instance and run analysis
                 analyzer = MarketAnalysis()
                 analyzer.analyze_market()
+                
+                # Sleep for a minute to avoid running multiple times in the same minute
+                time.sleep(60)
                 
             except Exception as e:
                 logging.error(f"Error in main loop: {str(e)}")
