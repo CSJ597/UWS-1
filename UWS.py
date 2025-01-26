@@ -27,29 +27,28 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 22 #  PM
-RUN_MINUTE = 13
+RUN_MINUTE = 16
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
-    et_tz = pytz.timezone('US/Eastern')
-    now = datetime.now(et_tz)
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.now(eastern)
     
-    # Set target time using the configured hour and minute
+    # Create target time for today
     target = now.replace(hour=RUN_HOUR, minute=RUN_MINUTE, second=0, microsecond=0)
     
-    # If we're past today's run time, move to next day
-    if now > target:
+    # If we've already passed today's run time, move to tomorrow
+    if now >= target:
         target += timedelta(days=1)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 5:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
     
     # Calculate sleep duration
     sleep_seconds = (target - now).total_seconds()
     if sleep_seconds > 0:
-        next_run = target.strftime('%Y-%m-%d %I:%M %p ET')
-        logging.info(f"Waiting until next run at {next_run}")
+        logging.info(f"Waiting until next run time: {target.strftime('%Y-%m-%d %I:%M %p %Z')}")
         time.sleep(sleep_seconds)
 
 class MarketAnalysis:
@@ -873,12 +872,21 @@ class MarketAnalysis:
 def main():
     """Main function to run market analysis"""
     try:
-        logging.info("Starting market analysis")
-        market = MarketAnalysis()
+        logging.info("Starting market analysis scheduler")
         
-        # Run analysis for ES futures
-        market.analyze_market()
-        
+        while True:
+            try:
+                # Wait until next scheduled run time
+                wait_until_next_run()
+                
+                # Create MarketAnalysis instance and run analysis
+                analyzer = MarketAnalysis()
+                analyzer.analyze_market()
+                
+            except Exception as e:
+                logging.error(f"Error in main loop: {str(e)}")
+                time.sleep(60)  # Wait a minute before retrying
+                
     except Exception as e:
         logging.error(f"Analysis error: {str(e)}")
 
