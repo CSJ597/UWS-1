@@ -27,7 +27,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  PM
-RUN_MINUTE = 51
+RUN_MINUTE = 55
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -354,7 +354,8 @@ class MarketAnalysis:
             })
             
             # Format the analysis message
-            analysis_message = f"""🎯 **Market Analysis Report** 📊
+            analysis_message = f"""\n\n
+🎯 **Market Analysis Report** 📊
             
 📈 **Price Action**
 • Current: ${analysis['current_price']:.2f}
