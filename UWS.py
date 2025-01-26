@@ -24,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 19
+RUN_MINUTE = 25
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -335,7 +335,107 @@ class MarketAnalysis:
                 'ai_analysis': f"\n{ai_analysis}\n"
             })
             
-            return analysis
+            # Format the analysis message
+            analysis_message = f"""🎯 **Market Analysis Report** 📊
+            
+📈 **Price Action**
+• Current: ${analysis['current_price']:.2f}
+• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
+• Daily Change: {analysis['daily_change']:.2f}%
+
+📊 **Market Conditions**
+• Trend: {analysis['market_trend']}
+• Volatility: {analysis['volatility']:.1f}%
+• Momentum: {abs(analysis['daily_change']):.1f}%
+
+🔍 **AI Analysis**
+{analysis['ai_analysis']}
+"""
+
+            # Send the analysis message first
+            self.send_discord_message(DISCORD_WEBHOOK_URL, analysis_message)
+
+            # Send the chart next
+            self.send_discord_message(DISCORD_WEBHOOK_URL, "", chart_base64=analysis['technical_chart'])
+
+            # Get articles from Finlight API
+            try:
+                client = finlight_client.FinlightApi({ 'apiKey': FINLIGHT_API_KEY })
+                articles = []
+                
+                # Send header for news section
+                self.send_discord_message(DISCORD_WEBHOOK_URL, "🔔 **Latest Market News** 🔔")
+                
+                # Get articles for each search query
+                search_queries = ['S&P 500', 'ES futures', 'SPX', 'SPY ETF']
+                for query in search_queries:
+                    try:
+                        response = client.articles.get_extended_articles({
+                            'params': {
+                                'query': query,
+                                'language': "en"
+                            }
+                        })
+                        
+                        if isinstance(response, list):
+                            articles.extend(response)
+                        elif isinstance(response, dict):
+                            if 'articles' in response:
+                                articles.extend(response['articles'])
+                            elif 'data' in response:
+                                articles.extend(response['data'])
+                            elif 'results' in response:
+                                articles.extend(response['results'])
+                    except Exception as e:
+                        logging.error(f"Error searching for query '{query}': {str(e)}")
+                        continue
+
+                # Remove duplicates and sort by date
+                unique_articles = []
+                seen_urls = set()
+                for article in articles:
+                    url = article.get('url') or article.get('link')
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        unique_articles.append(article)
+
+                articles = sorted(
+                    unique_articles,
+                    key=lambda x: datetime.fromisoformat(x.get('publishedAt', '').replace('Z', '+00:00')),
+                    reverse=True
+                )[:3]  # Get top 3 articles
+
+                # Send each article as an embed
+                for article in articles:
+                    embed = {
+                        'title': article.get('title', 'No Title'),
+                        'description': article.get('summary', article.get('description', 'No summary available')),
+                        'url': article.get('url', article.get('link', '')),
+                        'color': 3447003,  # Blue
+                        'fields': [
+                            {
+                                'name': 'Source',
+                                'value': article.get('source', article.get('publisher', 'Unknown')),
+                                'inline': True
+                            },
+                            {
+                                'name': 'Published',
+                                'value': datetime.fromisoformat(article.get('publishedAt', '').replace('Z', '+00:00')).strftime('%I:%M %p EST'),
+                                'inline': True
+                            }
+                        ]
+                    }
+                    self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[embed])
+
+                logging.info("Discord messages sent successfully in order: analysis, chart, news")
+                
+            except Exception as e:
+                logging.error(f"Error getting Finlight articles: {str(e)}")
+                logging.error(f"Full error: {repr(e)}")
+                # Send error message to Discord
+                self.send_discord_message(DISCORD_WEBHOOK_URL, f"⚠️ Error fetching news articles: {str(e)}")
+
+            logging.info("Analysis complete")
             
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
@@ -388,97 +488,30 @@ class MarketAnalysis:
             logging.error(f"Error generating prompt: {str(e)}")
             return None
 
-    def generate_market_report(self, analysis_results):
-        """Generate a comprehensive market report"""
-        try:
-            # Get the current date
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            
-            # Create the report header / date
-            report = f" {current_date}\n{'─' * 30}\n\n"
-            
-            chart = None
-            
-            for analysis in analysis_results:
-                if 'error' in analysis:
-                    report += f"Error: {analysis['error']}\n\n"
-                    continue
-                
-                # Trading Insights
-                volatility_status = "LOW" if analysis['volatility'] < 15 else "HIGH" if analysis['volatility'] > 30 else "MODERATE"
-                
-                # Calculate price position relative to day's range
-                price_position = (analysis['current_price'] - analysis['session_low']) / (analysis['session_high'] - analysis['session_low']) * 100 if analysis['session_high'] != analysis['session_low'] else 50
-                
-                # Format price position description
-                range_position = "NEAR HIGH" if price_position > 75 else "NEAR LOW" if price_position < 25 else "MID-RANGE"
-                
-                # Calculate change from previous close if available
-                prev_close_info = ""
-                if analysis['prev_close']:
-                    change_from_prev = ((analysis['current_price'] - analysis['prev_close']) / analysis['prev_close']) * 100
-                    prev_close_info = f"From Previous Close: {change_from_prev:+.2f}%\n"
-                
-                # Format news events
-                news_section = "\n🗂️UPCOMING NEWS\n"
-                if analysis.get('news_events'):
-                    for event in sorted(analysis['news_events'], key=lambda x: x['minutes_until']):
-                        impact_emoji = "🚨" if event['impact'] == "High" else "⚠️"
-                        news_section += f"• {impact_emoji} {event['currency']} {event['event']} at {event['time']} ({event['minutes_until']}m)\n"
-                else:
-                    news_section += "• No high-impact news events today\n"
-                
-                report += f"""
-📊 PRICE ACTION
-• Current: ${analysis['current_price']:.2f} ({range_position})
-• Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
-{prev_close_info}
-• Daily Change: {analysis['daily_change']:.2f}%
-
-📈 MARKET CONDITIONS
-• Trend: {analysis['market_trend']}
-• Volatility: {volatility_status}
-• Momentum: {abs(analysis['daily_change']):.1f}%
-
-{news_section}
-
-🔍 ANALYSIS
-{analysis['ai_analysis']}
-
-{'─' * 40}
-"""
-                
-                # Add chart image if present
-                chart = analysis.get('technical_chart', None)
-            
-            return report, chart
-            
-        except Exception as e:
-            logging.error(f"Error generating report: {str(e)}")
-            return f"Error generating report: {str(e)}", None
-
     def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None, news_articles=None):
         """Send a message to Discord with optional chart image and news articles"""
         try:
-            # First, send the market analysis
-            analysis_payload = {
+            # Prepare the base payload
+            payload = {
                 'username': 'Underground Wall Street 🏦',
-                'embeds': [{
-                    'title': '🎯 Market Analysis',
-                    'description': message,
-                    'color': 3447003,
-                    'timestamp': datetime.now().isoformat()
-                }]
+                'avatar_url': avatar_url or 'https://i.ibb.co/3N2NV0C/UWS-B-2.png'
             }
-            
-            if avatar_url:
-                analysis_payload['avatar_url'] = avatar_url
-            
-            # Send market analysis
-            response = requests.post(webhook_url, json=analysis_payload)
-            response.raise_for_status()
-            
-            # Then, if we have a chart, send it
+
+            # Add message if provided
+            if message:
+                payload['content'] = message
+
+            # Add embeds if provided
+            if news_articles:
+                payload['embeds'] = news_articles
+
+            # Send message with embeds if present
+            if message or news_articles:
+                response = requests.post(webhook_url, json=payload)
+                response.raise_for_status()
+                time.sleep(1)  # Add delay between messages
+
+            # Send chart as a separate message if provided
             if chart_base64:
                 chart_bytes = base64.b64decode(chart_base64)
                 files = {
@@ -486,116 +519,23 @@ class MarketAnalysis:
                 }
                 chart_response = requests.post(webhook_url, files=files)
                 chart_response.raise_for_status()
-            
-            # Finally, send news articles if provided
-            if news_articles:
-                news_embeds = []
-                for article in news_articles[:3]:  # Limit to 3 articles
-                    news_embeds.append({
-                        'title': f"📰 {article.get('title', 'No Title')}",
-                        'description': article.get('description', article.get('summary', 'No summary available')),
-                        'url': article.get('url', ''),
-                        'color': 15105570,  # Orange
-                        'fields': [
-                            {
-                                'name': 'Source',
-                                'value': article.get('source', 'Market News'),
-                                'inline': True
-                            }
-                        ]
-                    })
-                
-                if news_embeds:
-                    news_payload = {
-                        'username': 'Underground Wall Street 🏦',
-                        'embeds': news_embeds
-                    }
-                    if avatar_url:
-                        news_payload['avatar_url'] = avatar_url
-                    
-                    news_response = requests.post(webhook_url, json=news_payload)
-                    news_response.raise_for_status()
-            
-            logging.info("Discord messages sent successfully in order: analysis, chart, news")
-            
+                time.sleep(1)  # Add delay between messages
+
         except Exception as e:
-            logging.error(f"Failed to send Discord message: {str(e)}")
+            logging.error(f"Error sending Discord message: {str(e)}")
             raise
 
 def main():
+    """Main function to run market analysis"""
     try:
         logging.info("Starting market analysis")
         market = MarketAnalysis()
         
         # Run analysis for ES futures
-        analysis_results = [market.analyze_market()]
+        market.analyze_market()
         
-        if analysis_results:
-            # Generate report and chart
-            report, chart = market.generate_market_report(analysis_results)
-            
-            # First send market analysis
-            market.send_discord_message(
-                DISCORD_WEBHOOK_URL,
-                report,
-                chart,
-                avatar_url='https://i.ibb.co/3N2NV0C/UWS-B-2.png'
-            )
-            
-            # Get articles from Finlight API
-            try:
-                client = finlight_client.FinlightApi({ 'apiKey': FINLIGHT_API_KEY })
-                articles = []
-                
-                # Get articles for each search query
-                search_queries = ['S&P 500', 'ES futures', 'SPX']
-                for query in search_queries:
-                    logging.info(f"Fetching articles for query: {query}")
-                    query_articles = client.articles.get_extended_articles(
-                        query=query,
-                        language='en'
-                    )
-                    logging.info(f"Response type: {type(query_articles)}")
-                    logging.info(f"Response content: {query_articles}")
-                    
-                    if isinstance(query_articles, list):
-                        articles.extend(query_articles)
-                    elif isinstance(query_articles, dict) and 'articles' in query_articles:
-                        articles.extend(query_articles['articles'])
-                
-                logging.info(f"Total articles found: {len(articles)}")
-                
-                # Sort articles by date and get top 3
-                articles.sort(key=lambda x: x['publishedAt'], reverse=True)
-                top_articles = articles[:3]
-                
-                # Format articles for Discord with summaries
-                article_text = "\n\n**Recent Market News:**\n"
-                for article in top_articles:
-                    title = article.get('title', 'No Title')
-                    url = article.get('url', '')
-                    summary = article.get('summary', 'No summary available')
-                    source = article.get('source', 'Finlight')
-                    published = article.get('publishedAt', '')
-                    
-                    article_text += f"• **{title}**\n"
-                    article_text += f"  *Source: {source}*\n"
-                    article_text += f"  Summary: {summary}\n"
-                    article_text += f"  [Read more]({url})\n\n"
-                
-                # Send articles to Discord
-                market.send_discord_message(DISCORD_WEBHOOK_URL, article_text)
-                logging.info("Discord messages sent successfully in order: analysis, chart, news")
-                
-            except Exception as e:
-                logging.error(f"Error getting Finlight articles: {str(e)}")
-                logging.error(f"Full error: {repr(e)}")
-            
-            logging.info("Analysis complete")
-            
     except Exception as e:
-        logging.error(f"sis error: {str(e)}")
-        time.sleep(60)  # Wait a minute before retrying on error
+        logging.error(f"Analysis error: {str(e)}")
 
 if __name__ == "__main__":
     main()
