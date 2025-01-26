@@ -24,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 31
+RUN_MINUTE = 34
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -376,12 +376,13 @@ class MarketAnalysis:
                         }
                         
                         # Make direct API call
-                        url = 'https://api.finlight.me/v1/articles/extended'
+                        url = 'https://api.finlight.me/articles/extended'
                         response = requests.post(url, headers=headers, json={
-                            'params': {
-                                'query': query,
-                                'language': 'en'
-                            }
+                            'query': query,
+                            'language': 'en',
+                            'limit': 10,
+                            'sort': 'publishedAt',
+                            'order': 'desc'
                         })
                         response.raise_for_status()
                         
@@ -400,9 +401,11 @@ class MarketAnalysis:
                         
                     except requests.exceptions.RequestException as e:
                         logging.error(f"Error searching for query '{query}': {str(e)}")
-                        if e.response is not None and e.response.status_code == 429:
-                            logging.warning("Rate limit reached, waiting before next request")
-                            time.sleep(60)  # Wait longer on rate limit
+                        if e.response is not None:
+                            logging.error(f"Response content: {e.response.text}")
+                            if e.response.status_code == 429:
+                                logging.warning("Rate limit reached, waiting before next request")
+                                time.sleep(60)  # Wait longer on rate limit
                         continue
                     except Exception as e:
                         logging.error(f"Error processing query '{query}': {str(e)}")
