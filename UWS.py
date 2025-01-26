@@ -12,19 +12,22 @@ import re
 import time
 import finlight_client
 from io import BytesIO
+import openai
+import tempfile
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Configuration (Replace with your actual values)
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332276762603683862/aKE2i67QHm-1XR-HsMcQylaS0nKTS4yCVty4-jqvJscwkr6VRTacvLhP89F-4ABFDoQw"
-API_KEY = "e906d8579c6e48088664880e890ad89e"
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332904597848723588/cmauevZsGfVQ5u4zo9AHepkBU3dxHXrRT1swWFc0EoJ2O9WgGJIam202DXhpYbEIZi7o"
+API_KEY = "9565abdb39324933a9293185305bd017"
 FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15bfc6e52"  # Add your Finlight API key here
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 20 #  PM
-RUN_MINUTE = 39
+RUN_HOUR = 21 #  PM
+RUN_MINUTE = 50
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -39,7 +42,7 @@ def wait_until_next_run():
         target += timedelta(days=1)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
     
     # Calculate sleep duration
@@ -51,17 +54,20 @@ def wait_until_next_run():
 
 class MarketAnalysis:
     def __init__(self):
-        """Initialize analysis with default configurations"""
+        """Initialize market analysis."""
         self.analysis_config = {
             'period': '1d',  
             'interval': '1m',  
         }
         self.allowed_symbols = ['ES=F']
         self.eastern_tz = pytz.timezone('US/Eastern')
+        self.last_analysis_time = 0
+        self.cached_analysis = None
+        self.cache_duration = 300  # Cache for 5 minutes
     
     def fetch_market_data(self, symbol):
         """
-        Fetch comprehensive market data with error handling
+        Fetch comprehensive market data with error handling and retries
         
         Args:
             symbol (str): Stock/futures symbol to analyze
@@ -69,25 +75,53 @@ class MarketAnalysis:
         Returns:
             tuple: (market data DataFrame, error message or None)
         """
-        if symbol not in self.allowed_symbols:
-            return None, f"Symbol {symbol} not allowed. Only ES Futures are permitted."
+        max_retries = 3
+        retry_delay = 2  # seconds
         
-        try:
-            # Fetch detailed market data
-            data = yf.download(
-                symbol, 
-                period=self.analysis_config['period'], 
-                interval=self.analysis_config['interval']
-            )
-            
-            # Validate data
-            if data.empty:
-                return None, f"No data available for {symbol}"
-            
-            return data, None
+        for attempt in range(max_retries):
+            try:
+                # Get data with proper error handling
+                ticker = yf.Ticker(symbol)
+                data = ticker.history(period="1d", interval="1m")
+                
+                if data.empty:
+                    if attempt < max_retries - 1:
+                        logging.warning(f"No data received, retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    return None, "No market data available"
+                
+                # Calculate market metrics
+                close_prices = data['Close']
+                returns = close_prices.pct_change()
+                
+                market_data = {
+                    'symbol': symbol.replace('=F', ''),  # Clean up futures symbol
+                    'current_price': float(close_prices.iloc[-1]),
+                    'prev_close': float(close_prices.iloc[-2]) if len(close_prices) > 1 else None,
+                    'daily_change': float(((close_prices.iloc[-1] - close_prices.iloc[0]) / close_prices.iloc[0]) * 100),
+                    'volatility': float(np.std(returns.dropna()) * np.sqrt(252) * 100),
+                    'market_trend': self.identify_market_trend(data),
+                    'technical_chart': self.generate_technical_chart(data, 'ES'),
+                    'session_high': float(data['High'].max()),
+                    'session_low': float(data['Low'].min()),
+                    'volume': int(data['Volume'].sum()) if 'Volume' in data.columns else None,
+                    'data': data  # Store raw data for charts
+                }
+                
+                return market_data, None
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logging.warning(f"Error fetching market data (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    logging.error(f"Failed to fetch market data after {max_retries} attempts: {str(e)}")
+                    return None, f"Error fetching market data: {str(e)}"
         
-        except Exception as e:
-            return None, f"Data fetch error for {symbol}: {str(e)}"
+        return None, "Failed to fetch market data after all retries"
 
     def identify_market_trend(self, data):
         """
@@ -311,24 +345,7 @@ class MarketAnalysis:
             ai_prompt = self._generate_advanced_prompt(analysis, news_events, None)
             
             # AI Analysis with enhanced prompt
-            ai_analysis = ""
-            try:
-                if ai_prompt:
-                    response = requests.post(
-                        'https://api.aimlapi.com/v1/chat/completions',
-                        json=ai_prompt,
-                        headers={'Authorization': f'Bearer {API_KEY}'}
-                    )
-                    
-                    if response.status_code in [200, 201]:
-                        ai_analysis = response.json()['choices'][0]['message']['content'].strip()
-                    else:
-                        ai_analysis = "Unable to generate AI analysis. API returned an error."
-                        logging.error(f"API Error: {response.text}")
-                
-            except Exception as e:
-                ai_analysis = f"Analysis Error: {str(e)}"
-                logging.error(f"Error getting AI analysis: {str(e)}")
+            ai_analysis = self.get_ai_analysis(analysis)
             
             # Update analysis with AI response
             analysis.update({
@@ -343,10 +360,12 @@ class MarketAnalysis:
 • Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
 • Daily Change: {analysis['daily_change']:.2f}%
 
+
 📊 **Market Conditions**
 • Trend: {analysis['market_trend']}
 • Volatility: {analysis['volatility']:.1f}%
 • Momentum: {abs(analysis['daily_change']):.1f}%
+
 
 🔍 **AI Analysis**
 {analysis['ai_analysis']}
@@ -360,133 +379,368 @@ class MarketAnalysis:
 
             # Get articles from Finlight API
             try:
-                articles = []
-                
                 # Send header for news section
                 self.send_discord_message(DISCORD_WEBHOOK_URL, "🔔 **Latest Market News** 🔔")
                 
-                # Get articles for each search query
-                search_queries = ['S&P 500', 'ES futures', 'SPX', 'SPY ETF']
-                for query in search_queries:
+                # Create headers with API key
+                headers = {
+                    'accept': 'application/json',
+                    'X-API-KEY': FINLIGHT_API_KEY
+                }
+                
+                # Make multiple API calls with different market-related queries
+                queries = [
+                    'S&P 500',
+                    'ES futures',
+                    'SPY trading',
+                    'market futures'
+                ]
+                
+                all_articles = []
+                seen_sources = set()
+                filtered_articles = []
+                backup_articles = []
+
+                for query in queries:
                     try:
-                        # Create headers with API key
-                        headers = {
-                            'x-api-key': FINLIGHT_API_KEY,
-                            'Content-Type': 'application/json'
-                        }
-                        
-                        # Make direct API call for extended articles
-                        url = 'https://api.finlight.me/v1/articles/extended'
-                        response = requests.post(url, headers=headers, json={
-                            'query': query,
-                            'language': 'en',
-                            'limit': 10,
-                            'sort': 'publishedAt',
-                            'order': 'desc',
-                            'include': ['title', 'summary', 'keyFacts', 'assetImpacts', 'sentiment']
-                        })
+                        # Make direct API call for articles with extended model and all fields
+                        url = f'https://api.finlight.me/v1/articles?query={query}&sort=publishedAt&order=DESC&limit=20&model=extended&fields=title,description,content,summary,sentiment,confidence,authors,topics,entities'
+                        response = requests.get(url, headers=headers)
                         response.raise_for_status()
                         
                         data = response.json()
-                        if isinstance(data, list):
-                            articles.extend(data)
-                        elif isinstance(data, dict):
-                            if 'articles' in data:
-                                articles.extend(data['articles'])
-                            elif 'data' in data:
-                                articles.extend(data['data'])
-                            elif 'results' in data:
-                                articles.extend(data['results'])
-                            
-                        time.sleep(1)  # Add delay between API calls
-                        
-                    except requests.exceptions.RequestException as e:
-                        logging.error(f"Error searching for query '{query}': {str(e)}")
-                        if e.response is not None:
-                            logging.error(f"Response content: {e.response.text}")
-                            if e.response.status_code == 429:
-                                logging.warning("Rate limit reached, waiting before next request")
-                                time.sleep(60)  # Wait longer on rate limit
-                        continue
+                        if isinstance(data, dict) and 'articles' in data:
+                            # Log the query and number of articles found
+                            logging.info(f"Query '{query}' returned {len(data['articles'])} articles")
+                            # Log the first article to see its structure
+                            if data['articles']:
+                                logging.info(f"Sample article fields: {list(data['articles'][0].keys())}")
+                            all_articles.extend(data['articles'])
                     except Exception as e:
-                        logging.error(f"Error processing query '{query}': {str(e)}")
+                        logging.warning(f"Error fetching articles for query '{query}': {str(e)}")
                         continue
 
-                # Remove duplicates and sort by date
-                unique_articles = []
-                seen_urls = set()
-                for article in articles:
-                    url = article.get('url') or article.get('link')
-                    if url and url not in seen_urls:
-                        seen_urls.add(url)
-                        unique_articles.append(article)
+                # Filter articles
+                for article in all_articles:
+                    # Skip if not a dict or missing required fields
+                    if not isinstance(article, dict):
+                        continue
+                        
+                    # Check if article is relevant to S&P 500/ES
+                    title = article.get('title', '').lower()
+                    content = article.get('content', '')  # Try to get full content
+                    summary = article.get('summary', '')  # Try to get summary
+                    description = article.get('description', '')  # Try to get description
+                    
+                    # Combine all text fields for relevance check
+                    all_content = f"{title} {content} {summary} {description}".lower()
+                    
+                    relevant_terms = ['s&p', 'sp500', 'spy', 'es futures', 'es-mini', 'stock market', 'market futures', 'dow', 'nasdaq', 'market summary']
+                    if not any(term in all_content for term in relevant_terms):
+                        continue
 
-                articles = sorted(
-                    unique_articles,
-                    key=lambda x: datetime.fromisoformat(x.get('publishedAt', '').replace('Z', '+00:00')),
-                    reverse=True
-                )[:3]  # Get top 3 articles
+                    # Get source
+                    source = article.get('source', '')
+                    if not source:
+                        continue
 
-                # Send each article as an embed with extended information
-                if articles:
-                    for article in articles:
-                        # Format key facts and asset impacts if available
-                        key_facts = article.get('keyFacts', [])
-                        key_facts_text = '\n'.join([f'• {fact}' for fact in key_facts]) if key_facts else ''
-                        
-                        asset_impacts = article.get('assetImpacts', [])
-                        asset_impacts_text = '\n'.join([f'• {impact}' for impact in asset_impacts]) if asset_impacts else ''
-                        
-                        # Get sentiment if available
-                        sentiment = article.get('sentiment', {})
-                        sentiment_text = f"Sentiment: {sentiment.get('score', 'N/A')} ({sentiment.get('label', 'N/A')})" if sentiment else ''
-                        
-                        # Build description with all available information
-                        description = []
-                        if article.get('summary'):
-                            description.append(f"📝 **Summary**\n{article['summary']}")
-                        if key_facts_text:
-                            description.append(f"\n🔑 **Key Facts**\n{key_facts_text}")
-                        if asset_impacts_text:
-                            description.append(f"\n💹 **Asset Impacts**\n{asset_impacts_text}")
-                        if sentiment_text:
-                            description.append(f"\n🎯 **{sentiment_text}**")
-                        
-                        embed = {
-                            'title': article.get('title', 'No Title'),
-                            'description': '\n\n'.join(description) or 'No summary available',
-                            'url': article.get('url', article.get('link', '')),
-                            'color': 3447003,  # Blue
-                            'fields': [
-                                {
-                                    'name': 'Source',
-                                    'value': article.get('source', article.get('publisher', 'Unknown')),
-                                    'inline': True
-                                },
-                                {
-                                    'name': 'Published',
-                                    'value': datetime.fromisoformat(article.get('publishedAt', '').replace('Z', '+00:00')).strftime('%I:%M %p EST'),
-                                    'inline': True
-                                }
-                            ]
-                        }
-                        self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[embed])
-                else:
-                    self.send_discord_message(DISCORD_WEBHOOK_URL, "No new articles found at this time.")
+                    # If source is new, add to filtered articles
+                    if source not in seen_sources:
+                        seen_sources.add(source)
+                        filtered_articles.append(article)
+                    else:
+                        # Keep as backup in case we don't have enough unique sources
+                        backup_articles.append(article)
 
-                logging.info("Discord messages sent successfully in order: analysis, chart, news")
-                
+                # Sort both lists by date
+                def get_article_date(article):
+                    if not isinstance(article, dict):
+                        return datetime.min
+                    date_str = article.get('publishDate', '')
+                    if not date_str:
+                        return datetime.min
+                    try:
+                        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    except ValueError:
+                        try:
+                            return datetime.fromisoformat(date_str)
+                        except ValueError:
+                            return datetime.min
+
+                filtered_articles = sorted(filtered_articles, key=get_article_date, reverse=True)
+                backup_articles = sorted(backup_articles, key=get_article_date, reverse=True)
+
+                # If we don't have enough articles from unique sources, add from backup
+                while len(filtered_articles) < 3 and backup_articles:
+                    filtered_articles.append(backup_articles.pop(0))
+
+                # Ensure we have exactly 3 articles
+                filtered_articles = filtered_articles[:3]
+
+                # Send each article as an embed
+                for article in filtered_articles:
+                    # Build description with available information
+                    description = []
+                    
+                    # Log article fields for debugging
+                    logging.info(f"Processing article with fields: {list(article.keys())}")
+                    
+                    # Try to fetch article content if we have a link
+                    article_link = article.get('link', '')
+                    if article_link:
+                        try:
+                            article_response = requests.get(article_link, timeout=5)
+                            if article_response.status_code == 200:
+                                # Extract main content using basic heuristics
+                                from bs4 import BeautifulSoup
+                                soup = BeautifulSoup(article_response.text, 'html.parser')
+                                
+                                # Remove script and style elements
+                                for script in soup(["script", "style"]):
+                                    script.decompose()
+                                
+                                # Get text and clean it up
+                                text = soup.get_text()
+                                lines = (line.strip() for line in text.splitlines())
+                                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                                text = ' '.join(chunk for chunk in chunks if chunk)
+                                
+                                # Take first 500 characters as content
+                                if text:
+                                    description.append(f"📄 **Content**\n{text[:500]}...")
+                        except Exception as e:
+                            logging.warning(f"Error fetching article content: {str(e)}")
+                    
+                    # If we couldn't get content, use title
+                    if not description:
+                        title = article.get('title', '')
+                        if title:
+                            description.append(f"📄 **Title**\n{title}")
+                        else:
+                            description.append("No content available")
+                    
+                    # Add sentiment if available
+                    sentiment = article.get('sentiment', '')
+                    confidence = article.get('confidence', '')
+                    if sentiment and confidence:
+                        description.append(f"\n🎯 **Sentiment**: {sentiment.capitalize()} (Confidence: {float(confidence):.2%})")
+                    
+                    # Add authors if available
+                    authors = article.get('authors', '')
+                    if authors:
+                        description.append(f"\n✍️ **Authors**: {authors}")
+                    
+                    # Add topics if available
+                    topics = article.get('topics', [])
+                    if topics:
+                        description.append(f"\n📌 **Topics**: {', '.join(topics)}")
+                    
+                    # Add entities if available
+                    entities = article.get('entities', [])
+                    if entities:
+                        entity_names = [e.get('name') for e in entities if e.get('name')]
+                        if entity_names:
+                            description.append(f"\n🏢 **Mentioned**: {', '.join(entity_names[:3])}")
+                    
+                    # Format the date
+                    try:
+                        published_date = get_article_date(article)
+                        date_str = published_date.strftime('%I:%M %p EST') if published_date != datetime.min else 'Unknown'
+                    except Exception:
+                        date_str = 'Unknown'
+                    
+                    embed = {
+                        'title': article.get('title', 'No Title'),
+                        'description': '\n\n'.join(description) or 'No description available',
+                        'url': article.get('link', ''),
+                        'color': 3447003,  # Blue
+                        'fields': [
+                            {
+                                'name': 'Source',
+                                'value': article.get('source', 'Unknown'),
+                                'inline': True
+                            },
+                            {
+                                'name': 'Published',
+                                'value': date_str,
+                                'inline': True
+                            }
+                        ]
+                    }
+                    self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[embed])
+
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Error fetching articles: {str(e)}")
+                if e.response is not None:
+                    logging.error(f"Response content: {e.response.text}")
+                self.send_discord_message(DISCORD_WEBHOOK_URL, "Unable to fetch articles at this time.")
             except Exception as e:
-                logging.error(f"Error getting Finlight articles: {str(e)}")
-                logging.error(f"Full error: {repr(e)}")
-                # Send error message to Discord
-                self.send_discord_message(DISCORD_WEBHOOK_URL, f"⚠️ Error fetching news articles: {str(e)}")
+                logging.error(f"Error processing articles: {str(e)}")
+                self.send_discord_message(DISCORD_WEBHOOK_URL, "Unable to process articles at this time.")
 
+            logging.info("Discord messages sent successfully in order: analysis, chart, news")
             logging.info("Analysis complete")
             
         except Exception as e:
             logging.error(f"Market analysis error: {str(e)}")
             raise
+
+    def prepare_market_prompt(self, data):
+        """Prepare the prompt for AI analysis."""
+        try:
+            # Get market data from the input
+            current_price = data.get('current_price', 0)
+            prev_close = data.get('prev_close', 0)
+            daily_change = data.get('daily_change', 0)
+            market_trend = data.get('market_trend', '')
+            
+            # Create a concise prompt under 256 chars
+            prompt = f"ES futures: ${current_price:.2f}, prev ${prev_close:.2f}, {daily_change:+.2f}%, trend: {market_trend}. Analyze key levels and sentiment."
+            
+            return prompt
+            
+        except Exception as e:
+            logging.error(f"Error preparing market prompt: {str(e)}")
+            return f"Analyze ES futures. Change: {data.get('daily_change', 0):.2f}%"
+
+    def get_ai_analysis(self, data):
+        """Get AI analysis of market data."""
+        try:
+            current_time = time.time()
+            
+            # Check if we have a cached analysis that's still valid
+            if self.cached_analysis and (current_time - self.last_analysis_time) < self.cache_duration:
+                logging.info("Using cached market analysis")
+                return self.cached_analysis
+            
+            # Prepare the prompt with market data
+            prompt = self.prepare_market_prompt(data)
+            
+            # Make API request with exponential backoff for rate limits
+            max_retries = 3
+            base_delay = 1  # Start with 1 second delay
+            
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        'https://api.aimlapi.com/v1/chat/completions',
+                        headers={'Authorization': f'Bearer {API_KEY}'},
+                        json={
+                            'model': 'gpt-3.5-turbo',
+                            'messages': [{'role': 'user', 'content': prompt}],
+                            'temperature': 0.7,
+                            'max_tokens': 500
+                        }
+                    )
+                    
+                    # Log the request for debugging
+                    logging.info(f"HTTP Request: POST https://api.aimlapi.com/v1/chat/completions \"{response.status_code} {response.reason}\"")
+                    
+                    if response.status_code == 429:  # Rate limit hit
+                        if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                            delay = base_delay * (2 ** attempt)  # Exponential backoff
+                            logging.info(f"Rate limit hit, waiting {delay} seconds before retry...")
+                            time.sleep(delay)
+                            continue
+                    
+                    response.raise_for_status()
+                    analysis = response.json()['choices'][0]['message']['content']
+                    
+                    # Cache the successful analysis
+                    self.cached_analysis = analysis
+                    self.last_analysis_time = current_time
+                    
+                    return analysis
+                    
+                except requests.exceptions.RequestException as e:
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        logging.info(f"Retrying request to /chat/completions in {delay} seconds")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        logging.error(f"AI API Error: {str(e)}")
+                        if hasattr(e, 'response') and e.response is not None:
+                            logging.error(f"Error code: {e.response.status_code} - {e.response.text}")
+                        
+                        # Use fallback analysis and cache it
+                        analysis = self.get_fallback_analysis(data)
+                        self.cached_analysis = analysis
+                        self.last_analysis_time = current_time
+                        return analysis
+            
+            # If we've exhausted all retries, use fallback
+            analysis = self.get_fallback_analysis(data)
+            self.cached_analysis = analysis
+            self.last_analysis_time = current_time
+            return analysis
+            
+        except Exception as e:
+            logging.error(f"Error in get_ai_analysis: {str(e)}")
+            analysis = self.get_fallback_analysis(data)
+            self.cached_analysis = analysis
+            self.last_analysis_time = current_time
+            return analysis
+
+    def get_fallback_analysis(self, data):
+        """Generate a fallback analysis when AI API is unavailable."""
+        try:
+            # Get market data
+            current_price = data.get('current_price', 0)
+            prev_close = data.get('prev_close', 0)
+            daily_change = data.get('daily_change', 0)
+            volatility = data.get('volatility', 0)
+            market_trend = data.get('market_trend', '')
+            session_high = data.get('session_high', 0)
+            session_low = data.get('session_low', 0)
+            
+            # Determine trend based on available data
+            if market_trend.lower() == 'bullish':
+                trend = "bullish"
+                strength = "showing strength"
+            elif market_trend.lower() == 'bearish':
+                trend = "bearish"
+                strength = "showing weakness"
+            else:
+                trend = "neutral"
+                strength = "consolidating"
+            
+            # Generate analysis based on available data
+            analysis = [
+                f"ES Futures Technical Analysis:",
+                f"Current Price: {current_price:.2f}",
+                f"Previous Close: {prev_close:.2f}",
+                f"Daily Change: {daily_change:.2f}%",
+                f"",
+                f"Session Range:",
+                f"- High: {session_high:.2f}",
+                f"- Low: {session_low:.2f}",
+                f"- Volatility: {volatility:.2f}%",
+                f"",
+                f"Market Trend: {trend.capitalize()}, {strength}",
+            ]
+            
+            # Add volatility interpretation
+            if volatility > 20:
+                analysis.append("High volatility suggests increased market uncertainty")
+            elif volatility < 10:
+                analysis.append("Low volatility suggests market stability")
+            
+            # Add range analysis
+            range_size = session_high - session_low
+            avg_price = (session_high + session_low) / 2
+            range_percent = (range_size / avg_price) * 100
+            
+            if range_percent > 1:
+                analysis.append("Wide trading range indicates active price discovery")
+            else:
+                analysis.append("Narrow trading range suggests tight price consolidation")
+            
+            return "\n".join(analysis)
+            
+        except Exception as e:
+            logging.error(f"Error in fallback analysis: {str(e)}")
+            return f"Market Analysis: {'Up' if daily_change > 0 else 'Down'} {abs(daily_change):.2f}%"
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
@@ -535,42 +789,54 @@ class MarketAnalysis:
             logging.error(f"Error generating prompt: {str(e)}")
             return None
 
-    def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None, news_articles=None):
-        """Send a message to Discord with optional chart image and news articles"""
-        try:
-            # Prepare the base payload
-            payload = {
-                'username': 'Underground Wall Street 🏦',
-                'avatar_url': avatar_url or 'https://i.ibb.co/3N2NV0C/UWS-B-2.png'
-            }
-
-            # Add message if provided
-            if message:
-                payload['content'] = message
-
-            # Add embeds if provided
-            if news_articles:
-                payload['embeds'] = news_articles
-
-            # Send message with embeds if present
-            if message or news_articles:
-                response = requests.post(webhook_url, json=payload)
-                response.raise_for_status()
-                time.sleep(1)  # Add delay between messages
-
-            # Send chart as a separate message if provided
-            if chart_base64:
-                chart_bytes = base64.b64decode(chart_base64)
+    def send_discord_message(self, webhook_url, content="", chart_base64=None, news_articles=None):
+        """Send message to Discord with UWS branding"""
+        
+        # Define UWS branding
+        username = "Underground Wall Street 🏦"
+        avatar_url = "https://i.ibb.co/3N2NV0C/UWS-B-2.png"
+        
+        # Prepare the payload
+        payload = {
+            "username": username,
+            "avatar_url": avatar_url
+        }
+        
+        # Add content if provided
+        if content:
+            payload["content"] = content
+            
+        # Add chart if provided
+        if chart_base64:
+            # Create a temporary file for the chart
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+                temp_file.write(base64.b64decode(chart_base64))
+                temp_file.flush()
+                
+                # Send chart as file
                 files = {
-                    'file': ('chart.png', chart_bytes, 'image/png')
+                    "file": ("chart.png", open(temp_file.name, "rb"), "image/png")
                 }
-                chart_response = requests.post(webhook_url, files=files)
-                chart_response.raise_for_status()
-                time.sleep(1)  # Add delay between messages
-
-        except Exception as e:
-            logging.error(f"Error sending Discord message: {str(e)}")
-            raise
+                
+                # Send with UWS branding
+                response = requests.post(
+                    webhook_url,
+                    data={"username": username, "avatar_url": avatar_url},
+                    files=files
+                )
+                response.raise_for_status()
+                
+                # Clean up temp file
+                os.unlink(temp_file.name)
+                return
+        
+        # Add news articles if provided
+        if news_articles:
+            payload["embeds"] = news_articles
+        
+        # Send the message
+        response = requests.post(webhook_url, json=payload)
+        response.raise_for_status()
 
 def main():
     """Main function to run market analysis"""
