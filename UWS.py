@@ -24,7 +24,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20 #  PM
-RUN_MINUTE = 11
+RUN_MINUTE = 13
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -547,59 +547,20 @@ def main():
                 client = finlight_client.FinlightApi({ 'apiKey': FINLIGHT_API_KEY })
                 articles = []
                 
-                # Get articles for each search query
-                for query in ['S&P 500', 'ES futures', 'SPX']:
-                    response = client.articles.getExtendedArticles({
-                        'params': {
-                            'query': query,
-                            'language': "en"
-                        }
-                    })
-                    
-                    if response and (isinstance(response, list) or response.get('articles')):
-                        articles.extend(response if isinstance(response, list) else response.get('articles', []))
+                search_queries = ['S&P 500', 'ES futures', 'SPX']
+                for query in search_queries:
+                    query_articles = client.articles.get_articles(query)
+                    articles.extend(query_articles)
                 
-                # Remove duplicates and sort by date
-                seen_urls = set()
-                unique_articles = []
-                for article in articles:
-                    url = article.get('url', '')
-                    if url and url not in seen_urls:
-                        seen_urls.add(url)
-                        unique_articles.append({
-                            'title': article.get('title', ''),
-                            'description': article.get('summary', ''),
-                            'source': article.get('source', 'Finlight'),
-                            'url': url,
-                            'time': article.get('publishedAt', '')
-                        })
+                articles.sort(key=lambda x: x['publishedAt'], reverse=True)
+                top_articles = articles[:3]
                 
-                # Send the top 3 articles to Discord
-                if unique_articles:
-                    news_payload = {
-                        'username': 'Underground Wall Street 🏦',
-                        'embeds': []
-                    }
-                    
-                    for article in sorted(unique_articles, key=lambda x: x['time'], reverse=True)[:3]:
-                        news_payload['embeds'].append({
-                            'title': f"📰 {article['title']}",
-                            'description': article['description'],
-                            'url': article['url'],
-                            'color': 15105570,  # Orange
-                            'fields': [
-                                {
-                                    'name': 'Source',
-                                    'value': article['source'],
-                                    'inline': True
-                                }
-                            ]
-                        })
-                    
-                    if news_payload['embeds']:
-                        response = requests.post(DISCORD_WEBHOOK_URL, json=news_payload)
-                        response.raise_for_status()
-                        logging.info("Sent Finlight articles to Discord")
+                article_text = "\n\n**Recent Market News:**\n"
+                for article in top_articles:
+                    article_text += f"• [{article['title']}]({article['url']})\n"
+                
+                market.send_discord_message(DISCORD_WEBHOOK_URL, article_text)
+                logging.info("Discord messages sent successfully in order: analysis, chart, news")
                 
             except Exception as e:
                 logging.error(f"Error getting Finlight articles: {str(e)}")
