@@ -27,7 +27,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 22 #  PM
-RUN_MINUTE = 24
+RUN_MINUTE = 35
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -885,12 +885,12 @@ def main():
                 analyzer = MarketAnalysis()
                 analyzer.analyze_market()
                 
-                # Sleep for a minute to avoid running multiple times in the same minute
-                time.sleep(60)
+                # Sleep for 30 seconds to avoid running multiple times
+                time.sleep(30)
                 
             except Exception as e:
                 logging.error(f"Error in main loop: {str(e)}")
-                time.sleep(60)  # Wait a minute before retrying
+                time.sleep(30)  # Wait 30 seconds before retrying
                 
     except Exception as e:
         logging.error(f"Analysis error: {str(e)}")
