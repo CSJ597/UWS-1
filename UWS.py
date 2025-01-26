@@ -27,7 +27,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 21 #  PM
-RUN_MINUTE = 50
+RUN_MINUTE = 52
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
