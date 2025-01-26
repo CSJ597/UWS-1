@@ -22,12 +22,12 @@ logging.basicConfig(level=logging.INFO,
 
 # Configuration (Replace with your actual values)
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1332904597848723588/cmauevZsGfVQ5u4zo9AHepkBU3dxHXrRT1swWFc0EoJ2O9WgGJIam202DXhpYbEIZi7o"
-API_KEY = "9565abdb39324933a9293185305bd017"
+API_KEY = "32760184b7ce475e942fde2344d49a68"
 FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15bfc6e52"  # Add your Finlight API key here
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 21 #  PM
-RUN_MINUTE = 52
+RUN_HOUR = 22 #  PM
+RUN_MINUTE = 13
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -42,7 +42,7 @@ def wait_until_next_run():
         target += timedelta(days=1)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
     
     # Calculate sleep duration
@@ -477,97 +477,33 @@ class MarketAnalysis:
                 # Ensure we have exactly 3 articles
                 filtered_articles = filtered_articles[:3]
 
-                # Send each article as an embed
+                # Process each article
+                news_articles = []
                 for article in filtered_articles:
-                    # Build description with available information
-                    description = []
-                    
-                    # Log article fields for debugging
-                    logging.info(f"Processing article with fields: {list(article.keys())}")
-                    
-                    # Try to fetch article content if we have a link
-                    article_link = article.get('link', '')
-                    if article_link:
-                        try:
-                            article_response = requests.get(article_link, timeout=5)
-                            if article_response.status_code == 200:
-                                # Extract main content using basic heuristics
-                                from bs4 import BeautifulSoup
-                                soup = BeautifulSoup(article_response.text, 'html.parser')
-                                
-                                # Remove script and style elements
-                                for script in soup(["script", "style"]):
-                                    script.decompose()
-                                
-                                # Get text and clean it up
-                                text = soup.get_text()
-                                lines = (line.strip() for line in text.splitlines())
-                                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                                text = ' '.join(chunk for chunk in chunks if chunk)
-                                
-                                # Take first 500 characters as content
-                                if text:
-                                    description.append(f"📄 **Content**\n{text[:500]}...")
-                        except Exception as e:
-                            logging.warning(f"Error fetching article content: {str(e)}")
-                    
-                    # If we couldn't get content, use title
-                    if not description:
-                        title = article.get('title', '')
-                        if title:
-                            description.append(f"📄 **Title**\n{title}")
-                        else:
-                            description.append("No content available")
-                    
-                    # Add sentiment if available
-                    sentiment = article.get('sentiment', '')
-                    confidence = article.get('confidence', '')
-                    if sentiment and confidence:
-                        description.append(f"\n🎯 **Sentiment**: {sentiment.capitalize()} (Confidence: {float(confidence):.2%})")
-                    
-                    # Add authors if available
-                    authors = article.get('authors', '')
-                    if authors:
-                        description.append(f"\n✍️ **Authors**: {authors}")
-                    
-                    # Add topics if available
-                    topics = article.get('topics', [])
-                    if topics:
-                        description.append(f"\n📌 **Topics**: {', '.join(topics)}")
-                    
-                    # Add entities if available
-                    entities = article.get('entities', [])
-                    if entities:
-                        entity_names = [e.get('name') for e in entities if e.get('name')]
-                        if entity_names:
-                            description.append(f"\n🏢 **Mentioned**: {', '.join(entity_names[:3])}")
-                    
-                    # Format the date
-                    try:
-                        published_date = get_article_date(article)
-                        date_str = published_date.strftime('%I:%M %p EST') if published_date != datetime.min else 'Unknown'
-                    except Exception:
-                        date_str = 'Unknown'
-                    
-                    embed = {
-                        'title': article.get('title', 'No Title'),
-                        'description': '\n\n'.join(description) or 'No description available',
-                        'url': article.get('link', ''),
-                        'color': 3447003,  # Blue
-                        'fields': [
-                            {
-                                'name': 'Source',
-                                'value': article.get('source', 'Unknown'),
-                                'inline': True
-                            },
-                            {
-                                'name': 'Published',
-                                'value': date_str,
-                                'inline': True
-                            }
-                        ]
-                    }
-                    self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[embed])
+                    processed_article = self.process_article(article)
+                    if processed_article:
+                        news_articles.append({
+                            'title': article.get('title', 'No Title'),
+                            'description': processed_article,
+                            'url': article.get('link', ''),
+                            'color': 3447003,  # Blue
+                            'fields': [
+                                {
+                                    'name': 'Source',
+                                    'value': article.get('source', 'Unknown'),
+                                    'inline': True
+                                },
+                                {
+                                    'name': 'Published',
+                                    'value': get_article_date(article).strftime('%I:%M %p EST') if get_article_date(article) != datetime.min else 'Unknown',
+                                    'inline': True
+                                }
+                            ]
+                        })
+
+                # Send each article as an embed
+                for article in news_articles:
+                    self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[article])
 
             except requests.exceptions.RequestException as e:
                 logging.error(f"Error fetching articles: {str(e)}")
@@ -595,7 +531,7 @@ class MarketAnalysis:
             market_trend = data.get('market_trend', '')
             
             # Create a concise prompt under 256 chars
-            prompt = f"ES futures: ${current_price:.2f}, prev ${prev_close:.2f}, {daily_change:+.2f}%, trend: {market_trend}. Analyze key levels and sentiment."
+            prompt = f"ES futures: ${current_price:.2f}, prev ${prev_close:.2f}, {daily_change:+.2f}%, trend: {market_trend}. Provide a brief market sentiment analysis."
             
             return prompt
             
@@ -787,6 +723,102 @@ class MarketAnalysis:
         
         except Exception as e:
             logging.error(f"Error generating prompt: {str(e)}")
+            return None
+
+    def process_article(self, article):
+        """Process a single article and return its formatted content."""
+        try:
+            # Extract basic article info
+            title = article.get('title', '')
+            link = article.get('link', '')
+            source = article.get('source', '')
+            date = article.get('publishDate', '')
+            sentiment = article.get('sentiment', '')
+            confidence = article.get('confidence', '')
+            
+            # Try to get content from text field or fetch it
+            content = None
+            if link:
+                try:
+                    response = requests.get(link, timeout=5)
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        # Remove script and style elements
+                        for script in soup(["script", "style"]):
+                            script.decompose()
+                        # Get text content
+                        text = soup.get_text()
+                        # Clean up text
+                        lines = (line.strip() for line in text.splitlines())
+                        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                        content = ' '.join(chunk for chunk in chunks if chunk)
+                        if content:
+                            content = content[:500] + "..."  # Limit length
+                except Exception as e:
+                    logging.error(f"Error fetching content: {str(e)}")
+            
+            # Build the article description
+            content_parts = []
+            
+          
+            
+            # Add content if available
+            if content:
+                content_parts.append(f"📄 {content}")
+            
+            # Add sentiment if available
+            if sentiment and confidence:
+                content_parts.append(f"🎯 **Sentiment**: {sentiment.capitalize()} (Confidence: {float(confidence):.2%})")
+            
+            # Add source and date
+            source_date = []
+            if source:
+                source_date.append(source)
+            try:
+                parsed_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                eastern_date = parsed_date.astimezone(self.eastern_tz)
+                source_date.append(eastern_date.strftime('%I:%M %p ET'))
+            except:
+                if date:
+                    source_date.append(date)
+            
+            if source_date:
+                content_parts.append(f"*{' - '.join(source_date)}*")
+            
+          
+            
+            return '\n'.join(content_parts)
+            
+        except Exception as e:
+            logging.error(f"Error processing article: {str(e)}")
+            if title and link:
+                return f"**{title}**\n[Read more]({link})"
+            return None
+
+    def fetch_article_content(self, link):
+        """Fetch article content from the given link."""
+        try:
+            response = requests.get(link, timeout=5)
+            if response.status_code == 200:
+                # Extract main content using basic heuristics
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Remove script and style elements
+                for script in soup(["script", "style"]):
+                    script.decompose()
+                
+                # Get text and clean it up
+                text = soup.get_text()
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = ' '.join(chunk for chunk in chunks if chunk)
+                
+                # Take first 500 characters as content
+                if text:
+                    return text[:500] + "..."
+        except Exception as e:
+            logging.error(f"Error fetching article content: {str(e)}")
             return None
 
     def send_discord_message(self, webhook_url, content="", chart_base64=None, news_articles=None):
