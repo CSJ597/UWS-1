@@ -23,7 +23,7 @@ API_KEY = "bbbdc8f307d44bd6bc90f9920926abb4"
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 19  #  PM
-RUN_MINUTE = 52
+RUN_MINUTE = 54
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -427,20 +427,38 @@ class MarketAnalysis:
     def send_discord_message(self, webhook_url, message, chart_base64=None, avatar_url=None, news_articles=None):
         """Send a message to Discord with optional chart image and news articles"""
         try:
-            embeds = []
+            # First, send the market analysis
+            analysis_payload = {
+                'username': 'Underground Wall Street 🏦',
+                'embeds': [{
+                    'title': '🎯 Market Analysis',
+                    'description': message,
+                    'color': 3447003,
+                    'timestamp': datetime.now().isoformat()
+                }]
+            }
             
-            # Add market analysis as first embed
-            embeds.append({
-                'title': '🎯 Market Analysis',
-                'description': message,
-                'color': 3447003,
-                'timestamp': datetime.now().isoformat()
-            })
+            if avatar_url:
+                analysis_payload['avatar_url'] = avatar_url
             
-            # Add news articles if provided
+            # Send market analysis
+            response = requests.post(webhook_url, json=analysis_payload)
+            response.raise_for_status()
+            
+            # Then, if we have a chart, send it
+            if chart_base64:
+                chart_bytes = base64.b64decode(chart_base64)
+                files = {
+                    'file': ('chart.png', chart_bytes, 'image/png')
+                }
+                chart_response = requests.post(webhook_url, files=files)
+                chart_response.raise_for_status()
+            
+            # Finally, send news articles if provided
             if news_articles:
+                news_embeds = []
                 for article in news_articles[:3]:  # Limit to 3 articles
-                    embeds.append({
+                    news_embeds.append({
                         'title': f"📰 {article.get('title', 'No Title')}",
                         'description': article.get('description', article.get('summary', 'No summary available')),
                         'url': article.get('url', ''),
@@ -453,30 +471,19 @@ class MarketAnalysis:
                             }
                         ]
                     })
+                
+                if news_embeds:
+                    news_payload = {
+                        'username': 'Underground Wall Street 🏦',
+                        'embeds': news_embeds
+                    }
+                    if avatar_url:
+                        news_payload['avatar_url'] = avatar_url
+                    
+                    news_response = requests.post(webhook_url, json=news_payload)
+                    news_response.raise_for_status()
             
-            # First, send the embeds
-            payload = {
-                'username': 'Underground Wall Street 🏦',
-                'embeds': embeds
-            }
-            
-            if avatar_url:
-                payload['avatar_url'] = avatar_url
-            
-            # Send the text and embeds first
-            response = requests.post(webhook_url, json=payload)
-            response.raise_for_status()
-            
-            # Then, if we have a chart, send it as a follow-up message
-            if chart_base64:
-                chart_bytes = base64.b64decode(chart_base64)
-                files = {
-                    'file': ('chart.png', chart_bytes, 'image/png')
-                }
-                chart_response = requests.post(webhook_url, files=files)
-                chart_response.raise_for_status()
-            
-            logging.info("Discord message sent successfully with news updates")
+            logging.info("Discord messages sent successfully in order: analysis, chart, news")
             
         except Exception as e:
             logging.error(f"Failed to send Discord message: {str(e)}")
