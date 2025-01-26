@@ -3,15 +3,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import requests
-import io
-from io import BytesIO
+import pytz
+import logging
 import base64
 from datetime import datetime, timedelta
-import logging
-import pytz
 from bs4 import BeautifulSoup
 import re
 import time
+from finlight_client.api import FinlightApi  # Updated import path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -24,7 +23,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 20  #  PM
-RUN_MINUTE = 0
+RUN_MINUTE = 4
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
