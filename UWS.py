@@ -26,8 +26,8 @@ API_KEY = "32760184b7ce475e942fde2344d49a68"
 FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15bfc6e52"  # Add your Finlight API key here
 
 # Target run time in Eastern Time (24-hour format)
-RUN_HOUR = 18 #  PM
-RUN_MINUTE = 45
+RUN_HOUR = 10 #  PM
+RUN_MINUTE = 00
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -43,7 +43,7 @@ def wait_until_next_run():
         target = target.replace(hour=RUN_HOUR, minute=RUN_MINUTE, second=0, microsecond=0)
     
     # Keep moving forward days until we hit a weekday (Monday = 0, Sunday = 6)
-    while target.weekday() > 7:  # Skip Saturday (5) and Sunday (6)
+    while target.weekday() > 4:  # Skip Saturday (5) and Sunday (6)
         target += timedelta(days=1)
         target = target.replace(hour=RUN_HOUR, minute=RUN_MINUTE, second=0, microsecond=0)
     
