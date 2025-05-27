@@ -1,3 +1,4 @@
+
 import yfinance as yf
 import numpy as np
 import pandas as pd
@@ -53,6 +54,41 @@ def wait_until_next_run():
         logging.info(f"Waiting until next run time: {target.strftime('%Y-%m-%d %I:%M %p %Z')}")
         time.sleep(sleep_seconds)
 
+def calculate_rsi(close_prices: pd.Series, window: int = 14) -> pd.Series:
+    """Calculate Relative Strength Index (RSI)."""
+    if len(close_prices) < window + 1:
+        return pd.Series([np.nan] * len(close_prices), index=close_prices.index)
+    delta = close_prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.fillna(method='bfill') # Backfill initial NaNs
+
+def calculate_macd(close_prices: pd.Series, fast_window: int = 12, slow_window: int = 26, signal_window: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Calculate Moving Average Convergence Divergence (MACD)."""
+    if len(close_prices) < slow_window:
+        nan_series = pd.Series([np.nan] * len(close_prices), index=close_prices.index)
+        return nan_series, nan_series, nan_series
+    exp1 = close_prices.ewm(span=fast_window, adjust=False).mean()
+    exp2 = close_prices.ewm(span=slow_window, adjust=False).mean()
+    macd_line = exp1 - exp2
+    signal_line = macd_line.ewm(span=signal_window, adjust=False).mean()
+    histogram = macd_line - signal_line
+    return macd_line.fillna(method='bfill'), signal_line.fillna(method='bfill'), histogram.fillna(method='bfill')
+
+def calculate_bollinger_bands(close_prices: pd.Series, window: int = 20, num_std_dev: int = 2) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Calculate Bollinger Bands."""
+    if len(close_prices) < window:
+        nan_series = pd.Series([np.nan] * len(close_prices), index=close_prices.index)
+        return nan_series, nan_series, nan_series
+    rolling_mean = close_prices.rolling(window=window).mean()
+    rolling_std = close_prices.rolling(window=window).std()
+    upper_band = rolling_mean + (rolling_std * num_std_dev)
+    lower_band = rolling_mean - (rolling_std * num_std_dev)
+    return upper_band.fillna(method='bfill'), rolling_mean.fillna(method='bfill'), lower_band.fillna(method='bfill')
+
+
 class MarketAnalysis:
     def __init__(self):
         """Initialize market analysis."""
@@ -66,6 +102,32 @@ class MarketAnalysis:
         self.cached_analysis = None
         self.cache_duration = 300  # Cache for 5 minutes
     
+    def _calculate_technical_indicators(self, data: pd.DataFrame) -> dict:
+        """
+        Calculates RSI, MACD, and Bollinger Bands, adds them to the DataFrame,
+        and returns their latest values.
+        """
+        close_prices = data['Close']
+        
+        # Calculate and add indicators to DataFrame
+        data['RSI'] = calculate_rsi(close_prices)
+        data['MACD_Line'], data['MACD_Signal'], data['MACD_Hist'] = calculate_macd(close_prices)
+        data['BB_Upper'], data['BB_Middle'], data['BB_Lower'] = calculate_bollinger_bands(close_prices)
+
+        # Prepare dictionary of latest indicator values
+        latest_indicators = {}
+        if not data.empty:
+            latest_indicators = {
+                'rsi': round(data['RSI'].iloc[-1], 2) if pd.notna(data['RSI'].iloc[-1]) else None,
+                'macd_line': round(data['MACD_Line'].iloc[-1], 2) if pd.notna(data['MACD_Line'].iloc[-1]) else None,
+                'macd_signal': round(data['MACD_Signal'].iloc[-1], 2) if pd.notna(data['MACD_Signal'].iloc[-1]) else None,
+                'macd_hist': round(data['MACD_Hist'].iloc[-1], 2) if pd.notna(data['MACD_Hist'].iloc[-1]) else None,
+                'bb_upper': round(data['BB_Upper'].iloc[-1], 2) if pd.notna(data['BB_Upper'].iloc[-1]) else None,
+                'bb_middle': round(data['BB_Middle'].iloc[-1], 2) if pd.notna(data['BB_Middle'].iloc[-1]) else None,
+                'bb_lower': round(data['BB_Lower'].iloc[-1], 2) if pd.notna(data['BB_Lower'].iloc[-1]) else None,
+            }
+        return latest_indicators
+
     def fetch_market_data(self, symbol):
         """
         Fetch comprehensive market data with error handling and retries
@@ -126,75 +188,173 @@ class MarketAnalysis:
 
     def identify_market_trend(self, data):
         """
-        Identify market trend (Trending or Ranging)
+        Identify market trend with more nuance (e.g., Strong/Weak Bullish/Bearish, Volatile/Quiet Ranging)
         
         Args:
-            data (pd.DataFrame): Market price data
+            data (pd.DataFrame): Market price data with 'Close', 'High', 'Low' columns
         
         Returns:
             str: Market trend classification
         """
-        if len(data) < 2:
+        if len(data) < 20:  # Increased minimum data points for SMA calculation
             return "INSUFFICIENT DATA"
-        
         try:
-            # Calculate price range and standard deviation
+            close_prices = data['Close']
+            
+            # Calculate price range and average price
             price_range = float(data['High'].max() - data['Low'].min())
+            avg_price = float(close_prices.mean()) 
             
-            # Use .item() to convert Series to scalar
-            avg_price = float(data['Close'].mean().item())
-            
-            # Prevent division by zero
             if avg_price == 0:
-                return "UNDEFINED"
+                return "UNDEFINED (Zero Avg Price)"
             
-            # Calculate standard deviation
-            price_std = float(data['Close'].std().item())
+            # Calculate standard deviation and Coefficient of Variation (CV)
+            price_std = float(close_prices.std()) 
+            cv = (price_std / avg_price) * 100  # Volatility percentage
             
-            # Coefficient of variation to assess trend
-            cv = (price_std / avg_price) * 100
+            # Calculate a short-term SMA (e.g., 20-period)
+            sma_short_period = 20 
+            if len(close_prices) < sma_short_period:
+                 return "INSUFFICIENT DATA FOR SMA" # Should be caught by initial check
+            sma_short = close_prices.rolling(window=sma_short_period).mean()
             
-            # Trend classification logic
-            first_close = float(data['Close'].iloc[0])
-            last_close = float(data['Close'].iloc[-1])
-            
-            if cv < 1.5:
-                return "RANGING"
-            elif last_close > first_close and price_range > 0:
-                return "BULLISH TREND"
-            elif last_close < first_close and price_range > 0:
-                return "BEARISH TREND"
+            # Determine SMA slope (simple difference for recent trend)
+            # Ensure there are enough points for slope calculation after dropping NaNs from rolling mean
+            sma_dropna = sma_short.dropna()
+            if len(sma_dropna) < 2: # Need at least two points to compare
+                sma_slope_normalized = 0 # Neutral slope if not enough data
             else:
-                return "RANGING"
-        
+                # Compare the latest SMA value with an earlier SMA value (e.g., 10 periods ago from the available SMA series)
+                # This gives a more robust slope than just last vs. second-to-last.
+                comparison_point_index = max(0, len(sma_dropna) - (sma_short_period // 2) -1) # Look back about half the SMA window
+                sma_slope = sma_dropna.iloc[-1] - sma_dropna.iloc[comparison_point_index]
+                sma_slope_normalized = (sma_slope / avg_price) * 100 # Normalize slope by avg_price for consistent comparison
+
+            # Trend classification logic
+            # CV thresholds: Low < 0.3%, Moderate 0.3-1.0%, High > 1.0%
+            # SMA Slope thresholds (normalized): Strong > 0.1%, Weak > 0.02%
+            
+            strong_slope_thresh_norm = 0.1 
+            weak_slope_thresh_norm = 0.02
+
+            if sma_slope_normalized > strong_slope_thresh_norm:
+                if cv > 1.0: 
+                    return "STRONG BULLISH (Volatile)"
+                else: 
+                    return "STRONG BULLISH (Steady)"
+            elif sma_slope_normalized > weak_slope_thresh_norm:
+                if cv > 1.0:
+                     return "WEAK BULLISH (Volatile)"
+                else:
+                     return "WEAK BULLISH (Quiet)"
+            elif sma_slope_normalized < -strong_slope_thresh_norm:
+                if cv > 1.0:
+                    return "STRONG BEARISH (Volatile)"
+                else:
+                    return "STRONG BEARISH (Steady)"
+            elif sma_slope_normalized < -weak_slope_thresh_norm:
+                if cv > 1.0:
+                    return "WEAK BEARISH (Volatile)"
+                else:
+                    return "WEAK BEARISH (Quiet)"
+            else: # SMA slope is relatively flat
+                if cv > 1.0: 
+                    return "VOLATILE RANGING"
+                elif cv > 0.3: 
+                    return "MODERATE RANGING"
+                else: 
+                    return "QUIET RANGING"
+                
         except Exception as e:
-            return f"TREND ANALYSIS ERROR: {str(e)}"
+            logging.error(f"Error in identify_market_trend: {str(e)}")
+            import traceback
+            logging.error(traceback.format_exc())
+            return "TREND ANALYSIS ERROR"
 
     def generate_technical_chart(self, data, symbol):
         """Generate a comprehensive technical analysis chart"""
-        # Create figure with two subplots
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
+        # Ensure data has a proper index for plotting if it's not already DatetimeIndex
+        # For this implementation, we'll assume data.index is suitable or convert to a simple range index for plotting.
+        plot_df = data.reset_index()
+
+        # Create figure with three subplots: Price+BB, RSI, MACD
+        fig, (ax_price, ax_rsi, ax_macd) = plt.subplots(
+            3, 1, figsize=(16, 12), sharex=True, 
+            gridspec_kw={'height_ratios': [3, 1, 1]}
+        )
         plt.style.use('dark_background')
-        
-        # Set the background color
         fig.patch.set_facecolor('#1e222d')
-        ax1.set_facecolor('#1e222d')
-        ax2.set_facecolor('#1e222d')
+
+        # --- Price and Bollinger Bands Subplot (ax_price) ---
+        ax_price.set_facecolor('#1e222d')
+        ax_price.plot(plot_df.index, plot_df['Close'], label='Price', color='cyan', linewidth=1.5)
+        if 'BB_Upper' in plot_df.columns and 'BB_Middle' in plot_df.columns and 'BB_Lower' in plot_df.columns:
+            ax_price.plot(plot_df.index, plot_df['BB_Upper'], label='Upper Band', color='dimgray', linestyle='--', linewidth=1)
+            ax_price.plot(plot_df.index, plot_df['BB_Middle'], label='Middle Band (SMA20)', color='darkorange', linestyle='--', linewidth=1.2)
+            ax_price.plot(plot_df.index, plot_df['BB_Lower'], label='Lower Band', color='dimgray', linestyle='--', linewidth=1)
+            ax_price.fill_between(plot_df.index, plot_df['BB_Lower'], plot_df['BB_Upper'], alpha=0.1, color='darkorange')
         
-        # Plot full timeframe
-        self._plot_ohlcv(data, ax1, f'UWS: {symbol} Full View')
-        
-        # Plot last hour
-        last_hour_data = data.tail(60)  # Last 60 minutes
-        self._plot_ohlcv(last_hour_data, ax2, f'UWS: {symbol} Last Hour')
-        
-        plt.tight_layout()
+        ax_price.set_title(f'UWS: {symbol} Analysis - Price & Bollinger Bands', color='white', pad=15)
+        ax_price.set_ylabel('Price', color='white')
+        ax_price.tick_params(axis='y', colors='white')
+        ax_price.grid(True, alpha=0.2, color='gray')
+        ax_price.legend(loc='upper left')
+        # Add percentage change text
+        if not plot_df.empty:
+            pct_change = ((plot_df['Close'].iloc[-1] - plot_df['Close'].iloc[0]) / plot_df['Close'].iloc[0]) * 100
+            ax_price.text(0.02, 0.95, f'{pct_change:+.2f}%',
+                            transform=ax_price.transAxes, color='white',
+                            fontsize=12, fontweight='bold', va='top')
+
+        # --- RSI Subplot (ax_rsi) ---
+        ax_rsi.set_facecolor('#1e222d')
+        if 'RSI' in plot_df.columns:
+            ax_rsi.plot(plot_df.index, plot_df['RSI'], label='RSI', color='magenta', linewidth=1.5)
+            ax_rsi.axhline(70, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
+            ax_rsi.axhline(50, color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+            ax_rsi.axhline(30, color='green', linestyle='--', linewidth=0.8, alpha=0.7)
+        ax_rsi.set_title('Relative Strength Index (RSI)', color='white', pad=10, fontsize=10)
+        ax_rsi.set_ylabel('RSI', color='white')
+        ax_rsi.set_ylim(0, 100)
+        ax_rsi.tick_params(axis='y', colors='white')
+        ax_rsi.grid(True, alpha=0.2, color='gray')
+        ax_rsi.legend(loc='upper left')
+
+        # --- MACD Subplot (ax_macd) ---
+        ax_macd.set_facecolor('#1e222d')
+        if 'MACD' in plot_df.columns and 'MACD_Signal' in plot_df.columns and 'MACD_Hist' in plot_df.columns:
+            ax_macd.plot(plot_df.index, plot_df['MACD'], label='MACD', color='lime', linewidth=1.5)
+            ax_macd.plot(plot_df.index, plot_df['MACD_Signal'], label='Signal Line', color='red', linestyle='--', linewidth=1.5)
+            # Color MACD Histogram bars
+            bar_colors = ['green' if val >= 0 else 'red' for val in plot_df['MACD_Hist']]
+            ax_macd.bar(plot_df.index, plot_df['MACD_Hist'], label='Histogram', color=bar_colors, alpha=0.5, width=0.7)
+            ax_macd.axhline(0, color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+        ax_macd.set_title('MACD', color='white', pad=10, fontsize=10)
+        ax_macd.set_ylabel('MACD', color='white')
+        ax_macd.tick_params(axis='y', colors='white')
+        ax_macd.grid(True, alpha=0.2, color='gray')
+        ax_macd.legend(loc='upper left')
+
+        # X-axis formatting (applied to the last subplot due to sharex=True)
+        # Use original datetime index for labels if available, otherwise use integer index
+        if isinstance(data.index, pd.DatetimeIndex):
+            times = data.index.strftime('%H:%M') # Format as HH:MM
+            step = max(1, len(plot_df) // 7) # Show around 7-8 labels
+            ax_macd.set_xticks(plot_df.index[::step])
+            ax_macd.set_xticklabels(times[::step], rotation=45, ha='right')
+        else:
+            step = max(1, len(plot_df) // 7)
+            ax_macd.set_xticks(plot_df.index[::step])
+            ax_macd.set_xticklabels(plot_df.index[::step], rotation=45, ha='right')
+        ax_macd.tick_params(axis='x', colors='white')
+        ax_macd.set_xlabel('Time', color='white')
+
+        plt.tight_layout(pad=1.5) # Add some padding
         
         # Save to buffer
         buf = BytesIO()
-        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', 
-                   facecolor='#1e222d', edgecolor='none')
-        plt.close()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='#1e222d') # Increased dpi slightly
+        plt.close(fig) # Ensure the specific figure is closed
         
         # Encode
         buf.seek(0)
@@ -320,55 +480,73 @@ class MarketAnalysis:
             
             # Get data
             ticker = yf.Ticker(symbol)
-            data = ticker.history(period="1d", interval="1m")
+            data = ticker.history(period=self.analysis_config['period'], interval=self.analysis_config['interval']) # Use config
             
             if data.empty:
+                logging.error(f"No data available for {symbol}")
+                self.send_discord_message(DISCORD_WEBHOOK_URL, f"⚠️ Market Analysis Error: No data available for {symbol}.")
                 return {'error': 'No data available'}
             
+            # Clean symbol for display
+            symbol_cleaned = symbol.replace('=F', '').replace('ES', 'S&P 500 E-mini') # More descriptive
+
+            # Calculate technical indicators and add them to 'data' DataFrame
+            # The 'data' DataFrame is modified in place by this call
+            technical_indicators = self._calculate_technical_indicators(data)
+
             close_prices = data['Close']
-            returns = close_prices.pct_change()
+            returns = close_prices.pct_change().dropna() # Drop NaNs from returns
             
             analysis = {
-                'symbol': 'ES',
-                'current_price': close_prices.iloc[-1],
-                'daily_change': ((close_prices.iloc[-1] - close_prices.iloc[0]) / close_prices.iloc[0]) * 100,
-                'volatility': float(np.std(returns.dropna().values) * np.sqrt(252) * 100),
-                'market_trend': self.identify_market_trend(data),
-                'technical_chart': self.generate_technical_chart(data, 'ES'),
-                'session_high': data['High'].iloc[0],
-                'session_low': data['Low'].iloc[0],
-                'prev_close': data['Close'].iloc[-2] if len(data) > 1 else None,
-                'volume': int(data['Volume'].iloc[0]) if 'Volume' in data.columns else None,
-                'news_events': news_events
+                'symbol': symbol_cleaned,
+                'current_price': round(close_prices.iloc[-1], 2),
+                'daily_change': round(((close_prices.iloc[-1] - close_prices.iloc[0]) / close_prices.iloc[0]) * 100, 2),
+                'volatility': round(np.std(returns) * np.sqrt(252 * 390) * 100, 2) if not returns.empty else 0, # Adjusted for 1m interval (390 min in trading day)
+                'market_trend': self.identify_market_trend(data.copy()), # Pass a copy to avoid issues if identify_market_trend modifies it
+                'technical_chart': self.generate_technical_chart(data.copy(), symbol_cleaned), # Pass copy with indicators
+                'session_high': round(data['High'].max(), 2),
+                'session_low': round(data['Low'].min(), 2),
+                'prev_close': round(close_prices.iloc[-2], 2) if len(close_prices) > 1 else None,
+                'volume': int(data['Volume'].iloc[-1]) if 'Volume' in data.columns and not data['Volume'].empty else None,
+                'news_events': news_events,
+                **technical_indicators # Merge the latest indicator values
             }
             
-            # Generate advanced prompt
-            ai_prompt = self._generate_advanced_prompt(analysis, news_events, None)
+            # Generate advanced prompt (will be updated later to include new indicators)
+            ai_prompt_payload = self._generate_advanced_prompt(analysis, news_events, None) 
             
             # AI Analysis with enhanced prompt
-            ai_analysis = self.get_ai_analysis(analysis)
+            ai_analysis_text = self.get_ai_analysis(ai_prompt_payload) # Pass payload directly
             
-            # Update analysis with AI response
             analysis.update({
-                'ai_analysis': f"\n{ai_analysis}\n"
+                'ai_analysis': f"\n{ai_analysis_text}\n" if ai_analysis_text else "\nAI analysis currently unavailable.\n"
             })
             
-            # Format the analysis message
+            # Format the analysis message (will be updated later to include new indicators)
             analysis_message = f"""\n\n
-🎯 **Market Analysis Report** 📊
-            
+🎯 **Market Analysis Report for {analysis['symbol']}** 📊
+        
 📈 **Price Action**
 • Current: ${analysis['current_price']:.2f}
 • Range: ${analysis['session_low']:.2f} - ${analysis['session_high']:.2f}
 • Daily Change: {analysis['daily_change']:.2f}%
-
+• Volume: {analysis.get('volume', 'N/A'):,}
 
 📊 **Market Conditions**
 • Trend: {analysis['market_trend']}
 • Volatility: {analysis['volatility']:.1f}%
-• Momentum: {abs(analysis['daily_change']):.1f}%
+• Momentum (Daily Change): {abs(analysis['daily_change']):.1f}%
 
+"""
+            # Add technical indicators to message if available
+            if analysis.get('rsi') is not None:
+                analysis_message += f"• RSI (14): {analysis['rsi']:.2f}\n"
+            if analysis.get('macd_line') is not None:
+                analysis_message += f"• MACD ({analysis.get('macd_line', 'N/A'):.2f}, {analysis.get('macd_signal', 'N/A'):.2f}, {analysis.get('macd_hist', 'N/A'):.2f})\n"
+            if analysis.get('bb_upper') is not None:
+                analysis_message += f"• Bollinger Bands: ({analysis.get('bb_lower', 'N/A'):.2f} - {analysis.get('bb_middle', 'N/A'):.2f} - {analysis.get('bb_upper', 'N/A'):.2f})\n"
 
+            analysis_message += f"""
 🔍 **AI Analysis**
 {analysis['ai_analysis']}
 """
@@ -376,8 +554,12 @@ class MarketAnalysis:
             # Send the analysis message first
             self.send_discord_message(DISCORD_WEBHOOK_URL, analysis_message)
 
-            # Send the chart next
-            self.send_discord_message(DISCORD_WEBHOOK_URL, "", chart_base64=analysis['technical_chart'])
+            # Send the chart next (will be updated later to show new indicators)
+            if analysis.get('technical_chart'):
+                self.send_discord_message(DISCORD_WEBHOOK_URL, "", chart_base64=analysis['technical_chart'])
+            else:
+                logging.warning("Technical chart was not generated.")
+
 
             # Get articles from Finlight API
             try:
@@ -410,98 +592,72 @@ class MarketAnalysis:
                         response = requests.get(url, headers=headers)
                         response.raise_for_status()
                         
-                        data = response.json()
-                        if isinstance(data, dict) and 'articles' in data:
-                            # Log the query and number of articles found
-                            logging.info(f"Query '{query}' returned {len(data['articles'])} articles")
-                            # Log the first article to see its structure
-                            if data['articles']:
-                                logging.info(f"Sample article fields: {list(data['articles'][0].keys())}")
-                            all_articles.extend(data['articles'])
+                        data_news = response.json() # Renamed to avoid conflict with market data
+                        if isinstance(data_news, dict) and 'articles' in data_news:
+                            logging.info(f"Query '{query}' returned {len(data_news['articles'])} articles")
+                            if data_news['articles']:
+                                logging.info(f"Sample article fields: {list(data_news['articles'][0].keys())}")
+                            all_articles.extend(data_news['articles'])
                     except Exception as e:
                         logging.warning(f"Error fetching articles for query '{query}': {str(e)}")
                         continue
 
                 # Filter articles
                 for article in all_articles:
-                    # Skip if not a dict or missing required fields
                     if not isinstance(article, dict):
                         continue
                         
-                    # Check if article is relevant to S&P 500/ES
                     title = article.get('title', '').lower()
-                    content = article.get('content', '')  # Try to get full content
-                    summary = article.get('summary', '')  # Try to get summary
-                    description = article.get('description', '')  # Try to get description
+                    content = article.get('content', '') 
+                    summary = article.get('summary', '')
+                    description = article.get('description', '')
                     
-                    # Combine all text fields for relevance check
-                    all_content = f"{title} {content} {summary} {description}".lower()
+                    is_relevant = False
+                    search_terms = ['s&p 500', 'es futures', 'spy']
+                    for term in search_terms:
+                        if term in title or term in (content or '') or term in (summary or '') or term in (description or ''):
+                            is_relevant = True
+                            break
                     
-                    relevant_terms = ['s&p', 'sp500', 'spy', 'es futures', 'es-mini', 'stock market', 'market futures', 'dow', 'nasdaq', 'market summary']
-                    if not any(term in all_content for term in relevant_terms):
+                    if not is_relevant:
                         continue
-
-                    # Get source
-                    source = article.get('source', '')
-                    if not source:
-                        continue
-
-                    # If source is new, add to filtered articles
-                    if source not in seen_sources:
-                        seen_sources.add(source)
+                    
+                    article_date_str = article.get('publishedAt')
+                    if article_date_str:
+                        article_date = self.get_article_date(article) # Assuming get_article_date is defined
+                        if article_date and (datetime.now(pytz.utc) - article_date).days > 0:
+                            continue
+                    
+                    source_name = article.get('source', {}).get('name')
+                    if source_name and source_name not in seen_sources:
                         filtered_articles.append(article)
-                    else:
-                        # Keep as backup in case we don't have enough unique sources
+                        seen_sources.add(source_name)
+                    elif not source_name:
                         backup_articles.append(article)
+                
+                if len(filtered_articles) < 5 and backup_articles:
+                    needed = 5 - len(filtered_articles)
+                    filtered_articles.extend(backup_articles[:needed])
+                
+                if filtered_articles:
+                    discord_news_embeds = []
+                    for article_data in filtered_articles[:5]:
+                        processed_article_content = self.process_article(article_data) # Assuming process_article is defined
+                        if processed_article_content:
+                            discord_news_embeds.append({
+                                "title": article_data.get('title', 'No Title'),
+                                "description": processed_article_content,
+                                "url": article_data.get('url', ''),
+                                "color": 0x1E90FF  # Dodger Blue
+                            })
+                    
+                    if discord_news_embeds:
+                        self.send_discord_message(DISCORD_WEBHOOK_URL, news_articles=discord_news_embeds)
+                    else:
+                        self.send_discord_message(DISCORD_WEBHOOK_URL, "No relevant news articles found today.")
+                else:
+                    self.send_discord_message(DISCORD_WEBHOOK_URL, "No relevant news articles found today.")
 
-                # Sort both lists by date
-                def get_article_date(article):
-                    if not isinstance(article, dict):
-                        return datetime.min
-                    date_str = article.get('publishDate', '')
-                    if not date_str:
-                        return datetime.min
-                    try:
-                        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    except ValueError:
-                        try:
-                            return datetime.fromisoformat(date_str)
-                        except ValueError:
-                            return datetime.min
-
-                filtered_articles = sorted(filtered_articles, key=get_article_date, reverse=True)
-                backup_articles = sorted(backup_articles, key=get_article_date, reverse=True)
-
-                # If we don't have enough articles from unique sources, add from backup
-                while len(filtered_articles) < 3 and backup_articles:
-                    filtered_articles.append(backup_articles.pop(0))
-
-                # Ensure we have exactly 3 articles
-                filtered_articles = filtered_articles[:3]
-
-                # Process each article
-                news_articles = []
-                for article in filtered_articles:
-                    processed_article = self.process_article(article)
-                    if processed_article:
-                        news_articles.append({
-                            'title': article.get('title', 'No Title'),
-                            'description': processed_article,
-                            'url': article.get('link', ''),
-                            'color': 3447003,  # Blue
-                            'fields': [
-                                {
-                                    'name': 'Source',
-                                    'value': article.get('source', 'Unknown'),
-                                    'inline': True
-                                },
-                                {
-                                    'name': 'Published',
-                                    'value': get_article_date(article).strftime('%I:%M %p EST') if get_article_date(article) != datetime.min else 'Unknown',
-                                    'inline': True
-                                }
-                            ]
-                        })
 
                 # Send each article as an embed
                 for article in news_articles:
@@ -625,60 +781,57 @@ class MarketAnalysis:
         try:
             # Get market data
             current_price = data.get('current_price', 0)
-            prev_close = data.get('prev_close', 0)
+            prev_close = data.get('previous_close', 0) 
             daily_change = data.get('daily_change', 0)
             volatility = data.get('volatility', 0)
-            market_trend = data.get('market_trend', '')
+            market_trend_str = data.get('trend', '') 
             session_high = data.get('session_high', 0)
             session_low = data.get('session_low', 0)
             
             # Determine trend based on available data
-            if market_trend.lower() == 'bullish':
-                trend = "bullish"
-                strength = "showing strength"
-            elif market_trend.lower() == 'bearish':
-                trend = "bearish"
-                strength = "showing weakness"
-            else:
-                trend = "neutral"
-                strength = "consolidating"
+            trend_label = "neutral"
+            strength_label = "consolidating"
+            if market_trend_str: 
+                if 'bullish' in market_trend_str.lower():
+                    trend_label = "bullish"
+                    strength_label = "showing strength"
+                elif 'bearish' in market_trend_str.lower():
+                    trend_label = "bearish"
+                    strength_label = "showing weakness"
+                elif 'ranging' in market_trend_str.lower():
+                    trend_label = "ranging"
+                    strength_label = "market is ranging"
             
             # Generate analysis based on available data
-            analysis = [
-                f"ES Futures Technical Analysis:",
+            analysis_lines = [
+                f"ES Futures Technical Analysis (Fallback Mode):",
                 f"Current Price: {current_price:.2f}",
-                f"Previous Close: {prev_close:.2f}",
+                f"Previous Close: {prev_close:.2f}", 
                 f"Daily Change: {daily_change:.2f}%",
-                f"",
-                f"Session Range:",
-                f"- High: {session_high:.2f}",
-                f"- Low: {session_low:.2f}",
-                f"- Volatility: {volatility:.2f}%",
-                f"",
-                f"Market Trend: {trend.capitalize()}, {strength}",
+                f"Session High: {session_high:.2f}",
+                f"Session Low: {session_low:.2f}",
+                f"Volatility: {volatility:.2f}%",
+                f"Market Trend: {trend_label.capitalize()}, {strength_label}.",
             ]
             
             # Add volatility interpretation
-            if volatility > 20:
-                analysis.append("High volatility suggests increased market uncertainty")
-            elif volatility < 10:
-                analysis.append("Low volatility suggests market stability")
-            
-            # Add range analysis
-            range_size = session_high - session_low
-            avg_price = (session_high + session_low) / 2
-            range_percent = (range_size / avg_price) * 100
-            
-            if range_percent > 1:
-                analysis.append("Wide trading range indicates active price discovery")
-            else:
-                analysis.append("Narrow trading range suggests tight price consolidation")
-            
-            return "\n".join(analysis)
+            if isinstance(volatility, (int, float)):
+                if volatility > 1.5: 
+                    analysis_lines.append("Note: Volatility is relatively high.")
+                elif volatility < 0.5: 
+                    analysis_lines.append("Note: Volatility is relatively low.")
+
+            return "\n".join(analysis_lines)
+
             
         except Exception as e:
             logging.error(f"Error in fallback analysis: {str(e)}")
-            return f"Market Analysis: {'Up' if daily_change > 0 else 'Down'} {abs(daily_change):.2f}%"
+            # Attempt to get daily_change from data if possible, otherwise provide a generic message
+            try:
+                daily_change_val = data.get('daily_change', 0.0) # Default to 0.0 if not found
+                return f"Fallback Analysis Error. Market: {'Up' if daily_change_val > 0 else 'Down'} {abs(daily_change_val):.2f}%. Details: {str(e)}"
+            except:
+                return f"Fallback Analysis Error. Unable to determine market direction. Details: {str(e)}"
 
     def _generate_advanced_prompt(self, market_data, news_events, market_news):
         """
@@ -693,34 +846,53 @@ class MarketAnalysis:
             dict: Structured prompt payload for AI analysis
         """
         try:
-            # Prepare concise technical context
-            technical_context = (f"Price: ${market_data['current_price']:.2f}, "
-                                 f"Change: {market_data['daily_change']:.2f}%, "
-                                 f"Trend: {market_data['market_trend']}, "
-                                 f"Volatility: {market_data['volatility']:.2f}%")
+            # market_data is the input, previously referred to as analysis_results in planning
+            prompt_str = f"""
+Analyze the current market conditions for {market_data.get('symbol', 'N/A')} based on the following data:
+Current Price: {market_data.get('current_price', 'N/A')}
+Previous Close: {market_data.get('previous_close', 'N/A')}
+Open: {market_data.get('open_price', 'N/A')}
+Day's High: {market_data.get('session_high', 'N/A')}
+Day's Low: {market_data.get('session_low', 'N/A')}
+Volume: {market_data.get('volume', 'N/A')}
+50-day SMA: {market_data.get('sma50', 'N/A')}
+200-day SMA: {market_data.get('sma200', 'N/A')}
+Market Trend: {market_data.get('trend', 'N/A')}
+Volatility (Std Dev of Price Changes): {market_data.get('volatility', 'N/A')}
+RSI (14-day): {market_data.get('RSI', 'N/A')}
+MACD Line: {market_data.get('MACD', 'N/A')}
+MACD Signal Line: {market_data.get('MACD_Signal', 'N/A')}
+MACD Histogram: {market_data.get('MACD_Hist', 'N/A')}
+Bollinger Bands (20-day, 2 std dev):
+  Upper Band: {market_data.get('BB_Upper', 'N/A')}
+  Middle Band (SMA20): {market_data.get('BB_Middle', 'N/A')}
+  Lower Band: {market_data.get('BB_Lower', 'N/A')}
+Key News Headlines: {market_data.get('news_summary', 'No relevant news found.')}
 
-            # Construct the prompt
-            prompt_content = (
-                f"Analyze the chart data:\n{technical_context}\n\n"
-                "Provide:\n- Insights\n- Forecast"
-            )
+Provide a concise analysis (max 3-4 sentences) covering:
+1. Current market sentiment (bullish, bearish, neutral) and its strength, considering the technical indicators.
+2. Key support and resistance levels, potentially indicated by Bollinger Bands or SMAs.
+3. Potential short-term outlook (e.g., likely to test support/resistance, consolidate, breakout) based on price action relative to indicators.
+4. Mention any significant news impact if applicable.
+Focus on actionable insights. Avoid generic statements. Be specific and integrate the provided technical indicators into your reasoning.
+"""
 
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a market analyst. Provide a detailed analysis based on the chart data."
+                    "content": "You are a sophisticated market analyst. Based on the detailed market data provided, offer a concise and actionable analysis. Integrate all technical indicators and news sentiment into your assessment."
                 },
                 {
                     "role": "user",
-                    "content": prompt_content
+                    "content": prompt_str
                 }
             ]
 
             return {
-                "model": "gpt-3.5-turbo",
+                "model": "gpt-4-turbo", 
                 "messages": messages,
                 "temperature": 0.3,
-                "max_tokens": 300  # Allow for detailed response
+                "max_tokens": 350
             }
         
         except Exception as e:
@@ -897,4 +1069,15 @@ def main():
         logging.error(f"Analysis error: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    # main() # Commented out for single test run
+    try:
+        print("Starting single test run of MarketAnalysis...")
+        logging.info("Executing single test run of MarketAnalysis...")
+        analyzer = MarketAnalysis()
+        analyzer.analyze_market()
+        print("Test run completed successfully.")
+        logging.info("Test run of MarketAnalysis completed successfully.")
+    except Exception as e:
+        import traceback
+        print(f"Error during test run: {str(e)}")
+        logging.error(f"Error during test run: {str(e)}\n{traceback.format_exc()}")
