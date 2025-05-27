@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 22 #  1-24
-RUN_MINUTE = 52 # 0-60
+RUN_MINUTE = 58 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -63,7 +63,7 @@ def calculate_rsi(close_prices: pd.Series, window: int = 14) -> pd.Series:
     loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
-    return rsi.fillna(method='bfill') # Backfill initial NaNs
+    return rsi.bfill() # Backfill initial NaNs
 
 def calculate_macd(close_prices: pd.Series, fast_window: int = 12, slow_window: int = 26, signal_window: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
     """Calculate Moving Average Convergence Divergence (MACD)."""
@@ -75,7 +75,7 @@ def calculate_macd(close_prices: pd.Series, fast_window: int = 12, slow_window: 
     macd_line = exp1 - exp2
     signal_line = macd_line.ewm(span=signal_window, adjust=False).mean()
     histogram = macd_line - signal_line
-    return macd_line.fillna(method='bfill'), signal_line.fillna(method='bfill'), histogram.fillna(method='bfill')
+    return macd_line.bfill(), signal_line.bfill(), histogram.bfill()
 
 def calculate_bollinger_bands(close_prices: pd.Series, window: int = 20, num_std_dev: int = 2) -> tuple[pd.Series, pd.Series, pd.Series]:
     """Calculate Bollinger Bands."""
@@ -86,7 +86,7 @@ def calculate_bollinger_bands(close_prices: pd.Series, window: int = 20, num_std
     rolling_std = close_prices.rolling(window=window).std()
     upper_band = rolling_mean + (rolling_std * num_std_dev)
     lower_band = rolling_mean - (rolling_std * num_std_dev)
-    return upper_band.fillna(method='bfill'), rolling_mean.fillna(method='bfill'), lower_band.fillna(method='bfill')
+    return upper_band.bfill(), rolling_mean.bfill(), lower_band.bfill()
 
 
 class MarketAnalysis:
@@ -628,7 +628,12 @@ class MarketAnalysis:
                         if article_date and (datetime.now(pytz.utc) - article_date).days > 0:
                             continue
                     
-                    source_name = article.get('source', {}).get('name')
+                    source_data = article.get('source')
+                    source_name = None
+                    if isinstance(source_data, dict):
+                        source_name = source_data.get('name')
+                    elif isinstance(source_data, str):
+                        source_name = source_data # If source is just a string, use it directly
                     if source_name and source_name not in seen_sources:
                         filtered_articles.append(article)
                         seen_sources.add(source_name)
