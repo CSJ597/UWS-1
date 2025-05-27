@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  1-24
-RUN_MINUTE = 17 # 0-60
+RUN_MINUTE = 22 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -277,10 +277,10 @@ class MarketAnalysis:
         # For this implementation, we'll assume data.index is suitable or convert to a simple range index for plotting.
         plot_df = data.reset_index()
 
-        # Create figure with three subplots: Price+BB, RSI, MACD
-        fig, (ax_price, ax_rsi, ax_macd) = plt.subplots(
-            3, 1, figsize=(16, 12), sharex=True, 
-            gridspec_kw={'height_ratios': [3, 1, 1]}
+        # Create figure with two subplots: Price+BB, RSI
+        fig, (ax_price, ax_rsi) = plt.subplots(
+            2, 1, figsize=(16, 10), sharex=True,  # Adjusted figsize for 2 plots
+            gridspec_kw={'height_ratios': [3, 1]} # Adjusted height ratios
         )
         plt.style.use('dark_background')
         fig.patch.set_facecolor('#1e222d')
@@ -320,34 +320,19 @@ class MarketAnalysis:
         ax_rsi.grid(True, alpha=0.2, color='gray')
         ax_rsi.legend(loc='upper left')
 
-        # --- MACD Subplot (ax_macd) ---
-        ax_macd.set_facecolor('#1e222d')
-        if 'MACD' in plot_df.columns and 'MACD_Signal' in plot_df.columns and 'MACD_Hist' in plot_df.columns:
-            ax_macd.plot(plot_df.index, plot_df['MACD'], label='MACD', color='lime', linewidth=1.5)
-            ax_macd.plot(plot_df.index, plot_df['MACD_Signal'], label='Signal Line', color='red', linestyle='--', linewidth=1.5)
-            # Color MACD Histogram bars
-            bar_colors = ['green' if val >= 0 else 'red' for val in plot_df['MACD_Hist']]
-            ax_macd.bar(plot_df.index, plot_df['MACD_Hist'], label='Histogram', color=bar_colors, alpha=0.5, width=0.7)
-            ax_macd.axhline(0, color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
-        ax_macd.set_title('MACD', color='white', pad=10, fontsize=10)
-        ax_macd.set_ylabel('MACD', color='white')
-        ax_macd.tick_params(axis='y', colors='white')
-        ax_macd.grid(True, alpha=0.2, color='gray')
-        ax_macd.legend(loc='upper left')
-
-        # X-axis formatting (applied to the last subplot due to sharex=True)
-        # Use original datetime index for labels if available, otherwise use integer index
-        if isinstance(data.index, pd.DatetimeIndex):
-            times = data.index.strftime('%H:%M') # Format as HH:MM
-            step = max(1, len(plot_df) // 7) # Show around 7-8 labels
-            ax_macd.set_xticks(plot_df.index[::step])
-            ax_macd.set_xticklabels(times[::step], rotation=45, ha='right')
-        else:
-            step = max(1, len(plot_df) // 7)
-            ax_macd.set_xticks(plot_df.index[::step])
-            ax_macd.set_xticklabels(plot_df.index[::step], rotation=45, ha='right')
-        ax_macd.tick_params(axis='x', colors='white')
-        ax_macd.set_xlabel('Time', color='white')
+    # X-axis formatting (applied to the last subplot due to sharex=True)
+    # Use original datetime index for labels if available, otherwise use integer index
+    if isinstance(data.index, pd.DatetimeIndex):
+        times = data.index.strftime('%H:%M') # Format as HH:MM
+        step = max(1, len(plot_df) // 7) # Show around 7-8 labels
+        ax_rsi.set_xticks(plot_df.index[::step])
+        ax_rsi.set_xticklabels(times[::step], rotation=45, ha='right')
+    else:
+        step = max(1, len(plot_df) // 7)
+        ax_rsi.set_xticks(plot_df.index[::step])
+        ax_rsi.set_xticklabels(plot_df.index[::step], rotation=45, ha='right')
+    ax_rsi.tick_params(axis='x', colors='white')
+    ax_rsi.set_xlabel('Time', color='white')
 
         plt.tight_layout(pad=1.5) # Add some padding
         
