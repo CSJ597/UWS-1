@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  1-24
-RUN_MINUTE = 28 # 0-60
+RUN_MINUTE = 36 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -336,14 +336,14 @@ class MarketAnalysis:
 
     plt.tight_layout(pad=1.5) # Add some padding
         
-        # Save to buffer
-        buf = BytesIO()
-        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='#1e222d') # Increased dpi slightly
-        plt.close(fig) # Ensure the specific figure is closed
+    # Save to buffer
+    buf = BytesIO()
+    plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='#1e222d') # Increased dpi slightly
+    plt.close(fig) # Ensure the specific figure is closed
         
-        # Encode
-        buf.seek(0)
-        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    # Encode
+    buf.seek(0)
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
     
     def _plot_ohlcv(self, data, ax, title):
         """Plot OHLCV data on the given axis"""
