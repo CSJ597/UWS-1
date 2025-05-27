@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  1-24
-RUN_MINUTE = 22 # 0-60
+RUN_MINUTE = 28 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -334,7 +334,7 @@ class MarketAnalysis:
     ax_rsi.tick_params(axis='x', colors='white')
     ax_rsi.set_xlabel('Time', color='white')
 
-        plt.tight_layout(pad=1.5) # Add some padding
+    plt.tight_layout(pad=1.5) # Add some padding
         
         # Save to buffer
         buf = BytesIO()
