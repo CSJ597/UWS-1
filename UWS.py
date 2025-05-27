@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  1-24
-RUN_MINUTE = 36 # 0-60
+RUN_MINUTE = 44 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -320,30 +320,30 @@ class MarketAnalysis:
         ax_rsi.grid(True, alpha=0.2, color='gray')
         ax_rsi.legend(loc='upper left')
 
-    # X-axis formatting (applied to the last subplot due to sharex=True)
-    # Use original datetime index for labels if available, otherwise use integer index
-    if isinstance(data.index, pd.DatetimeIndex):
-        times = data.index.strftime('%H:%M') # Format as HH:MM
-        step = max(1, len(plot_df) // 7) # Show around 7-8 labels
-        ax_rsi.set_xticks(plot_df.index[::step])
-        ax_rsi.set_xticklabels(times[::step], rotation=45, ha='right')
-    else:
-        step = max(1, len(plot_df) // 7)
-        ax_rsi.set_xticks(plot_df.index[::step])
-        ax_rsi.set_xticklabels(plot_df.index[::step], rotation=45, ha='right')
-    ax_rsi.tick_params(axis='x', colors='white')
-    ax_rsi.set_xlabel('Time', color='white')
+        # X-axis formatting (applied to the last subplot due to sharex=True)
+        # Use original datetime index for labels if available, otherwise use integer index
+        if isinstance(data.index, pd.DatetimeIndex):
+            times = data.index.strftime('%H:%M') # Format as HH:MM
+            step = max(1, len(plot_df) // 7) # Show around 7-8 labels
+            ax_rsi.set_xticks(plot_df.index[::step])
+            ax_rsi.set_xticklabels(times[::step], rotation=45, ha='right')
+        else:
+            step = max(1, len(plot_df) // 7)
+            ax_rsi.set_xticks(plot_df.index[::step])
+            ax_rsi.set_xticklabels(plot_df.index[::step], rotation=45, ha='right')
+        ax_rsi.tick_params(axis='x', colors='white')
+        ax_rsi.set_xlabel('Time', color='white')
 
-    plt.tight_layout(pad=1.5) # Add some padding
-        
-    # Save to buffer
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='#1e222d') # Increased dpi slightly
-    plt.close(fig) # Ensure the specific figure is closed
-        
-    # Encode
-    buf.seek(0)
-    return base64.b64encode(buf.getvalue()).decode('utf-8')
+        plt.tight_layout(pad=1.5) # Add some padding
+            
+        # Save to buffer
+        buf = BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='#1e222d') # Increased dpi slightly
+        plt.close(fig) # Ensure the specific figure is closed
+            
+        # Encode
+        buf.seek(0)
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
     
     def _plot_ohlcv(self, data, ax, title):
         """Plot OHLCV data on the given axis"""
