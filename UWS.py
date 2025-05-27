@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  1-24
-RUN_MINUTE = 6 # 0-60
+RUN_MINUTE = 13 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -518,11 +518,7 @@ class MarketAnalysis:
             # AI Analysis with enhanced prompt
             ai_analysis_text = self.get_ai_analysis(ai_prompt_payload) # Pass payload directly
             
-            analysis.update({
-                'ai_analysis': f"\n{ai_analysis_text}\n" if ai_analysis_text else "\nAI analysis currently unavailable.\n"
-            })
-            
-            # Format the analysis message (will be updated later to include new indicators)
+            # Format the analysis message
             analysis_message = f"""\n\n
 🎯 **Market Analysis Report for {analysis['symbol']}** 📊
         
@@ -546,9 +542,11 @@ class MarketAnalysis:
             if analysis.get('bb_upper') is not None:
                 analysis_message += f"• Bollinger Bands: ({analysis.get('bb_lower', 'N/A'):.2f} - {analysis.get('bb_middle', 'N/A'):.2f} - {analysis.get('bb_upper', 'N/A'):.2f})\n"
 
-            analysis_message += f"""
+            # Conditionally add AI Analysis section
+            if ai_analysis_text and ai_analysis_text.strip(): # Check if AI analysis text exists and is not just whitespace
+                analysis_message += f"""
 🔍 **AI Analysis**
-{analysis['ai_analysis']}
+{ai_analysis_text.strip()}
 """
 
             # Send the analysis message first
@@ -757,24 +755,24 @@ class MarketAnalysis:
                         if hasattr(e, 'response') and e.response is not None:
                             logging.error(f"Error code: {e.response.status_code} - {e.response.text}")
                         
-                        # Use fallback analysis and cache it
-                        analysis = self.get_fallback_analysis(data)
-                        self.cached_analysis = analysis
-                        self.last_analysis_time = current_time
-                        return analysis
+                        # AI API failed, return None
+                    logging.warning("AI API call failed after retries. No analysis will be generated.")
+                    self.cached_analysis = None # Clear cache or set to None
+                    self.last_analysis_time = current_time
+                    return None
             
-            # If we've exhausted all retries, use fallback
-            analysis = self.get_fallback_analysis(data)
-            self.cached_analysis = analysis
-            self.last_analysis_time = current_time
-            return analysis
+            # If we've exhausted all retries, return None
+        logging.warning("AI API call failed after all retries (end of loop). No analysis will be generated.")
+        self.cached_analysis = None # Clear cache or set to None
+        self.last_analysis_time = current_time
+        return None
             
         except Exception as e:
             logging.error(f"Error in get_ai_analysis: {str(e)}")
-            analysis = self.get_fallback_analysis(data)
-            self.cached_analysis = analysis
-            self.last_analysis_time = current_time
-            return analysis
+        logging.warning("Unexpected error in get_ai_analysis. No analysis will be generated.")
+        self.cached_analysis = None # Clear cache or set to None
+        self.last_analysis_time = current_time
+        return None
 
     def get_fallback_analysis(self, data):
         """Generate a fallback analysis when AI API is unavailable."""
