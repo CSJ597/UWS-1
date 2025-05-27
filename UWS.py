@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 22 #  1-24
-RUN_MINUTE = 49 # 0-60
+RUN_MINUTE = 52 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -658,11 +658,6 @@ class MarketAnalysis:
                 else:
                     self.send_discord_message(DISCORD_WEBHOOK_URL, "No relevant news articles found today.")
 
-
-                # Send each article as an embed
-                for article in news_articles:
-                    self.send_discord_message(DISCORD_WEBHOOK_URL, "", news_articles=[article])
-
             except requests.exceptions.RequestException as e:
                 logging.error(f"Error fetching articles: {str(e)}")
                 if e.response is not None:
@@ -1069,15 +1064,15 @@ def main():
         logging.error(f"Analysis error: {str(e)}")
 
 if __name__ == "__main__":
-    # main() # Commented out for single test run
-    try:
-        print("Starting single test run of MarketAnalysis...")
-        logging.info("Executing single test run of MarketAnalysis...")
-        analyzer = MarketAnalysis()
-        analyzer.analyze_market()
-        print("Test run completed successfully.")
-        logging.info("Test run of MarketAnalysis completed successfully.")
-    except Exception as e:
-        import traceback
-        print(f"Error during test run: {str(e)}")
-        logging.error(f"Error during test run: {str(e)}\n{traceback.format_exc()}")
+    main() # Restore main scheduling loop
+    # try:
+    #     print("Starting single test run of MarketAnalysis...")
+    #     logging.info("Executing single test run of MarketAnalysis...")
+    #     analyzer = MarketAnalysis()
+    #     analyzer.analyze_market()
+    #     print("Test run completed successfully.")
+    #     logging.info("Test run of MarketAnalysis completed successfully.")
+    # except Exception as e:
+    #     import traceback
+    #     print(f"Error during test run: {str(e)}")
+    #     logging.error(f"Error during test run: {str(e)}\n{traceback.format_exc()}")
