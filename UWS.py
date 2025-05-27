@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 23 #  1-24
-RUN_MINUTE = 13 # 0-60
+RUN_MINUTE = 17 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -756,16 +756,10 @@ class MarketAnalysis:
                             logging.error(f"Error code: {e.response.status_code} - {e.response.text}")
                         
                         # AI API failed, return None
-                    logging.warning("AI API call failed after retries. No analysis will be generated.")
-                    self.cached_analysis = None # Clear cache or set to None
-                    self.last_analysis_time = current_time
-                    return None
-            
-            # If we've exhausted all retries, return None
-        logging.warning("AI API call failed after all retries (end of loop). No analysis will be generated.")
-        self.cached_analysis = None # Clear cache or set to None
-        self.last_analysis_time = current_time
-        return None
+                        logging.warning("AI API call failed after retries. No analysis will be generated.")
+                        self.cached_analysis = None # Clear cache or set to None
+                        self.last_analysis_time = current_time
+                        return None
             
         except Exception as e:
             logging.error(f"Error in get_ai_analysis: {str(e)}")
