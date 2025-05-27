@@ -22,9 +22,9 @@ CONFIG = {
     'volatility_annualization_factor': 252,
     'run_hour': 10,
     'run_minute': 15,
-    'discord_webhook_url': os.getenv("DISCORD_WEBHOOK_URL"),
-    'ai_api_key': os.getenv("AI_API_KEY"),
-    'finlight_api_key': os.getenv("FINLIGHT_API_KEY"),
+    'discord_webhook_url': "https://discord.com/api/webhooks/1332904597848723588/cmauevZsGfVQ5u4zo9AHepkBU3dxHXrRT1swWFc0EoJ2O9WgGJIam202DXhpYbEIZi7o",
+    'ai_api_key': "32760184b7ce475e942fde2344d49a68",
+    'finlight_api_key': "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15bfc6e52",
     'timezone': 'US/Eastern'
 }
 
