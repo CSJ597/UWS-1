@@ -28,7 +28,7 @@ FINLIGHT_API_KEY = "sk_ec789eebf83e294eb0c841f331d2591e7881e39ca94c7d5dd02645a15
 
 # Target run time in Eastern Time (24-hour format)
 RUN_HOUR = 22 #  1-24
-RUN_MINUTE = 58 # 0-60
+RUN_MINUTE = 8 # 0-60
 
 def wait_until_next_run():
     """Wait until the next scheduled run time on weekdays"""
@@ -929,8 +929,23 @@ Focus on actionable insights. Avoid generic statements. Be specific and integrat
                         if content:
                             content = content[:500] + "..."  # Limit length
                 except Exception as e:
-                    logging.error(f"Error fetching content: {str(e)}")
-            
+                    logging.warning(f"Error fetching content via scraping for {link}: {str(e)}") # Changed to warning as we'll try API fields
+                    content = None # Ensure content is None if scraping fails
+
+            # Fallback to API fields if scraping failed or yielded no content
+            if not content:
+                content = article.get('content')
+                if not content:
+                    content = article.get('description')
+                if not content:
+                    content = article.get('summary')
+                
+                if content: # If we got content from API fields
+                    content = content[:500] + "..." # Limit length
+                else: # If no content from scraping or API
+                    logging.warning(f"No content found for article: {title} ({link}) from scraping or API fields.")
+                    content = "No detailed content available." # Placeholder
+
             # Build the article description
             content_parts = []
             
