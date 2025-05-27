@@ -11,3 +11,12 @@ openai-sdk>=0.0.4
 openai>=1.0.0
 mplfinance>=0.12.10b0
 seaborn>=0.12.0
+yfinance
+numpy
+pandas
+matplotlib
+requests
+pytz
+beautifulsoup4
+finlight-client
+openai
